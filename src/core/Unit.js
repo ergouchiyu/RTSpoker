@@ -1,5 +1,5 @@
 /**
- * 单位类 - 只在玩家指挥时行动
+ * 单位类
  */
 class Unit {
     constructor(type, owner, x, y) {
@@ -18,9 +18,9 @@ class Unit {
         this.targetX = x;
         this.targetY = y;
         this.target = null;
-        this.state = 'idle'; // idle / moving / attacking
+        this.state = 'idle';
         this.isSelected = false;
-        this.dead = false; // 标记是否死亡
+        this.dead = false;
     }
 
     moveTo(x, y) {
@@ -37,16 +37,10 @@ class Unit {
 
     update(dt) {
         if (this.dead) return;
-
         switch (this.state) {
-            case 'idle':
-                break;
-            case 'moving':
-                this.updateMoving(dt);
-                break;
-            case 'attacking':
-                this.updateAttacking(dt);
-                break;
+            case 'idle': break;
+            case 'moving': this.updateMoving(dt); break;
+            case 'attacking': this.updateAttacking(dt); break;
         }
     }
 
@@ -61,11 +55,7 @@ class Unit {
         if (dist < 5) {
             this.x = this.targetX;
             this.y = this.targetY;
-            if (this.target) {
-                this.state = 'attacking';
-            } else {
-                this.state = 'idle';
-            }
+            this.state = this.target ? 'attacking' : 'idle';
         } else {
             this.x += (dx / dist) * this.speed;
             this.y += (dy / dist) * this.speed;
@@ -83,26 +73,21 @@ class Unit {
 
     takeDamage(amount) {
         this.hp -= amount;
-        if (this.hp <= 0) {
-            this.die();
-        }
+        if (this.hp <= 0) this.die();
     }
 
     die() {
         this.dead = true;
-        // 从玩家列表移除
         this.owner.removeUnit(this);
-        // 从游戏选择列表移除
-        if (typeof Game !== 'undefined') {
-            Game.onUnitDestroyed(this);
-        }
+        if (typeof Game !== 'undefined') Game.onUnitDestroyed(this);
     }
 
     draw(ctx) {
         if (this.dead) return;
         ctx.save();
 
-        const color = this.owner.id === 0 ? CONSTANTS.COLORS.PLAYER1 : CONSTANTS.COLORS.PLAYER2;
+        // 颜色根据 owner.id
+        const color = this.owner.id === 0 ? '#e94560' : '#4ecdc4';
 
         // 选中光环
         if (this.isSelected) {
@@ -113,39 +98,23 @@ class Unit {
             ctx.stroke();
         }
 
-        if (this.type === 'infantry') {
-            // 步兵 - 圆形+头盔
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#333';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y - this.size * 0.3, this.size * 0.6, Math.PI, 0);
-            ctx.fill();
-            ctx.strokeStyle = '#666';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(this.x + this.size, this.y);
-            ctx.lineTo(this.x + this.size + 10, this.y - 5);
-            ctx.stroke();
-        } else {
-            // 工程师 - 圆形+黄帽
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#f1c40f';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y - this.size * 0.5, this.size * 0.7, Math.PI, 0);
-            ctx.fill();
-        }
+        // 绘制单位
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 类型标记
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.type === 'infantry' ? '兵' : '工', this.x, this.y);
 
         // 状态指示
         if (this.state === 'attacking') {
             ctx.fillStyle = '#e74c3c';
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
+            ctx.font = '12px Arial';
             ctx.fillText('⚔', this.x, this.y - this.size - 12);
         }
 
