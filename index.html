@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card RTS - 原型</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #game-canvas {
+            flex: 1;
+            background: #16213e;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #ui-overlay > * {
+            pointer-events: auto;
+        }
+        
+        #top-bar {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: flex;
+            gap: 20px;
+        }
+        
+        #bottom-bar {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn:hover {
+            background: #c73e54;
+        }
+        
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        #start-screen h1 {
+            font-size: 48px;
+            color: #e94560;
+        }
+        
+        #start-screen p {
+            font-size: 18px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="ui-overlay">
+            <div id="top-bar">
+                <span>玩家1: <span id="p1-supply">0</span> 补给</span>
+                <span>玩家2: <span id="p2-supply">0</span> 补给</span>
+            </div>
+            
+            <div id="bottom-bar">
+                <button class="btn" id="btn-infantry" onclick="Game.spawnUnit('infantry')">
+                    步兵 (100)
+                </button>
+                <button class="btn" id="btn-repair" onclick="Game.startRepair()">
+                    维修
+                </button>
+                <button class="btn" id="btn-end-turn" onclick="Game.endTurn()">
+                    结束回合
+                </button>
+            </div>
+        </div>
+        
+        <div id="start-screen">
+            <h1>Card RTS</h1>
+            <p>一边打扑克，一边实时派兵偷袭对方的手牌</p>
+            <button class="btn" onclick="Game.start()" style="font-size: 18px; padding: 12px 24px;">
+                开始游戏
+            </button>
+            <button class="btn" onclick="Game.startAI()" style="font-size: 18px; padding: 12px 24px;">
+                vs AI
+            </button>
+        </div>
+    </div>
+    
+    <!-- 游戏核心模块 -->
+    <script src="src/utils/constants.js"></script>
+    <script src="src/utils/helpers.js"></script>
+    <script src="src/core/Card.js"></script>
+    <script src="src/core/Player.js"></script>
+    <script src="src/core/Unit.js"></script>
+    <script src="src/systems/EconomySystem.js"></script>
+    <script src="src/systems/CombatSystem.js"></script>
+    <script src="src/systems/RepairSystem.js"></script>
+    <script src="src/ui/Renderer.js"></script>
+    <script src="src/ui/InputHandler.js"></script>
+    <script src="src/core/Game.js"></script>
+    
+    <script>
+        // 初始化游戏
+        window.onload = () => {
+            Game.init();
+        };
+    </script>
+</body>
+</html>
