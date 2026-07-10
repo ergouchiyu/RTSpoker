@@ -2,7 +2,6 @@
 extends Node2D
 
 @onready var game_manager: GameManager = $GameManager
-@onready var ui_layer: CanvasLayer = $UILayer
 
 # 框选状态
 var is_selecting := false
@@ -10,6 +9,7 @@ var select_start := Vector2.ZERO
 var select_end := Vector2.ZERO
 
 # UI 节点
+var ui_layer: CanvasLayer
 var turn_label: Label
 var supply_label: Label
 var cards_label: Label
@@ -22,7 +22,9 @@ func _ready():
 	_connect_signals()
 
 func _setup_ui():
-	# 创建 UI
+	ui_layer = CanvasLayer.new()
+	add_child(ui_layer)
+	
 	var vbox := VBoxContainer.new()
 	vbox.position = Vector2(10, 10)
 	ui_layer.add_child(vbox)
@@ -36,9 +38,9 @@ func _setup_ui():
 	cards_label = Label.new()
 	vbox.add_child(cards_label)
 	
-	# 按钮
+	# 按钮栏
 	var hbox := HBoxContainer.new()
-	hbox.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 200, get_viewport().get_visible_rect().size.y - 60)
+	hbox.position = Vector2(get_viewport_rect().size.x / 2 - 200, get_viewport_rect().size.y - 60)
 	ui_layer.add_child(hbox)
 	
 	play_button = Button.new()
@@ -58,7 +60,7 @@ func _setup_ui():
 	
 	# 消息
 	message_label = Label.new()
-	message_label.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 100, get_viewport().get_visible_rect().size.y / 2)
+	message_label.position = Vector2(get_viewport_rect().size.x / 2 - 100, get_viewport_rect().size.y / 2)
 	message_label.add_theme_font_size_override("font_size", 24)
 	ui_layer.add_child(message_label)
 
@@ -67,7 +69,7 @@ func _connect_signals():
 	game_manager.game_over.connect(_on_game_over)
 	game_manager.message.connect(_on_message)
 
-func _on_turn_changed(player_id: int):
+func _on_turn_changed(_player_id: int):
 	_update_ui()
 
 func _on_game_over(winner_id: int):
@@ -75,7 +77,6 @@ func _on_game_over(winner_id: int):
 
 func _on_message(text: String):
 	message_label.text = text
-	# 1.5秒后清除
 	await get_tree().create_timer(1.5).timeout
 	if message_label.text == text:
 		message_label.text = ""
@@ -94,6 +95,10 @@ func _update_ui():
 	turn_label.text = "玩家%d 的回合" % [cp.id + 1]
 	supply_label.text = "补给: %d" % int(cp.supply)
 	cards_label.text = "手牌: %d" % cp.hand.size()
+	
+	# 更新按钮状态
+	play_button.disabled = game_manager.selected_cards.is_empty() or cp.is_ai
+	pass_button.disabled = (game_manager.is_first_round and game_manager.last_play_type == "") or cp.is_ai
 
 func _input(event: InputEvent):
 	if event is InputEventMouseButton:
@@ -104,35 +109,24 @@ func _input(event: InputEvent):
 				select_end = event.position
 			else:
 				is_selecting = false
-				_handle_left_click(event.position)
+				_handle_left_release(event.position)
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			_handle_right_click(event.position)
 	
 	if event is InputEventMouseMotion and is_selecting:
 		select_end = event.position
+		queue_redraw()
 
-func _handle_left_click(pos: Vector2):
-	var cp := game_manager.get_current_player()
-	
-	# 检查是否点击了手牌
-	for card in cp.hand:
-		if card.contains_point(pos):
-			game_manager.select_card(card)
-			queue_redraw()
-			return
-	
-	# 框选检查
+func _handle_left_release(pos: Vector2):
+	# 检查是否是框选（移动超过5像素）
 	var rect := Rect2(
 		Vector2(min(select_start.x, select_end.x), min(select_start.y, select_end.y)),
 		abs(select_end - select_start)
 	)
 	
-	if rect.size.x > 5 and rect.size.y > 5:
+	if rect.size.x > 5 or rect.size.y > 5:
 		# 框选单位
 		game_manager.select_units_in_rect(rect)
-	else:
-		# 点击空地，清除选中
-		game_manager._clear_selection()
 	
 	queue_redraw()
 
@@ -144,7 +138,7 @@ func _handle_right_click(pos: Vector2):
 		if player.id == cp.id:
 			continue
 		for card in player.hand:
-			if card.contains_point(pos):
+			if is_instance_valid(card) and card.get_global_rect().has_point(pos):
 				game_manager.command_units_attack_card(card)
 				queue_redraw()
 				return
@@ -164,7 +158,7 @@ func _draw():
 	_draw_selection_box()
 
 func _draw_table():
-	var size := get_viewport().get_visible_rect().size
+	var size := get_viewport_rect().size
 	var margin := 100.0
 	
 	# 中央战场
@@ -185,7 +179,7 @@ func _draw_table():
 				draw_rect(Rect2(size.x - margin, 40, margin, size.y - 100), bg_color)
 
 func _draw_hands():
-	var size := get_viewport().get_visible_rect().size
+	var size := get_viewport_rect().size
 	
 	for player in game_manager.players:
 		var hand: Array = player.hand
@@ -202,17 +196,17 @@ func _draw_hands():
 			"top":
 				start_x = (size.x - total_width) / 2
 				start_y = 35
+			_:
+				continue
 		
 		for i in range(card_count):
 			var card: Card = hand[i]
-			var x := start_x + i * (GameConst.CARD_WIDTH + 6)
-			var y := start_y
-			card.position = Vector2(x, y)
-			card.is_face_up = (player.side == "bottom")
-			card.queue_redraw()
+			if is_instance_valid(card):
+				card.position = Vector2(start_x + i * (GameConst.CARD_WIDTH + 6), start_y)
+				card.is_face_up = (player.side == "bottom")
 
 func _draw_play_area():
-	var size := get_viewport().get_visible_rect().size
+	var size := get_viewport_rect().size
 	var cx := size.x / 2
 	var cy := size.y / 2 - 20
 	
@@ -227,11 +221,9 @@ func _draw_play_area():
 	for i in range(stack.size()):
 		var entry: Dictionary = stack[i]
 		var card: Card = entry.card
-		var x := start_x + i * 22
-		var y := cy - 26
-		card.position = Vector2(x, y)
-		card.is_face_up = true
-		card.queue_redraw()
+		if is_instance_valid(card):
+			card.position = Vector2(start_x + i * 22, cy - 26)
+			card.is_face_up = true
 
 func _draw_selection_box():
 	if is_selecting:

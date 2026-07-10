@@ -8,5 +8,3 @@ script = ExtResource("1_main")
 
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("2_gm")
-
-[node name="UILayer" type="CanvasLayer" parent="."]

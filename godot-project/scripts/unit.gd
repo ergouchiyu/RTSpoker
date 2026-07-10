@@ -1,10 +1,10 @@
-## 单位类 - 严格绑定 owner_id
+## 单位类 - 带碰撞体积，可单击选中
 class_name Unit
-extends Node2D
+extends Area2D
 
 enum State { IDLE, MOVING, ATTACKING }
 
-var owner_id: int = -1        # 归属玩家ID，不可变
+var owner_id: int = -1
 var unit_type: String = ""
 var hp: float = 100.0
 var max_hp: float = 100.0
@@ -14,7 +14,10 @@ var state: State = State.IDLE
 var is_selected: bool = false
 
 var target_position: Vector2 = Vector2.ZERO
-var attack_target: Card = null  # 攻击目标牌
+var attack_target: Card = null
+
+# 碰撞形状
+var collision_shape: CollisionShape2D
 
 func _init(oid: int, utype: String, pos: Vector2):
 	owner_id = oid
@@ -27,6 +30,24 @@ func _init(oid: int, utype: String, pos: Vector2):
 		max_hp = GameConst.INFANTRY_HP
 		attack_damage = GameConst.INFANTRY_ATTACK
 		move_speed = GameConst.INFANTRY_SPEED
+
+func _ready():
+	# 创建碰撞形状
+	collision_shape = CollisionShape2D.new()
+	var circle_shape := CircleShape2D.new()
+	circle_shape.radius = 15.0
+	collision_shape.shape = circle_shape
+	add_child(collision_shape)
+	
+	# 启用输入检测
+	input_event.connect(_on_input_event)
+
+func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		# 通知游戏管理器选中这个单位
+		var game_manager = get_tree().get_first_node_in_group("game_manager")
+		if game_manager:
+			game_manager.select_unit(self)
 
 func _process(delta: float):
 	match state:
@@ -62,7 +83,7 @@ func _update_moving(delta: float):
 		if attack_target and is_instance_valid(attack_target):
 			state = State.ATTACKING
 		else:
-			state = State.IDLE
+			state = State.IDLO
 	else:
 		position += direction * move_speed * delta
 
@@ -106,6 +127,3 @@ func _draw():
 		draw_rect(Rect2(bar_pos, Vector2(bar_width, bar_height)), Color.DARK_GRAY)
 		var hp_color := Color.GREEN if hp / max_hp > 0.5 else Color.RED
 		draw_rect(Rect2(bar_pos, Vector2(bar_width * hp / max_hp, bar_height)), hp_color)
-
-func contains_point(point: Vector2) -> bool:
-	return position.distance_to(point) <= 15.0
