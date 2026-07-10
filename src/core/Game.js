@@ -18,10 +18,11 @@ const Game = {
     isTurnActive: false,
     
     // 扑克相关
-    lastPlay: null,           // 上一手出的牌
-    lastPlayPlayer: null,     // 上一手出牌的玩家
-    passCount: 0,             // 连续跳过次数
-    isFirstRound: true,       // 是否是第一轮（第一轮必须出牌）
+    lastPlay: null,
+    lastPlayPlayer: null,
+    passCount: 0,
+    isFirstRound: true,
+    playedCardsStack: [], // 所有出过的牌（显示在中央）
 
     init() {
         this.canvas = document.getElementById('game-canvas');
@@ -34,13 +35,20 @@ const Game = {
 
     start() {
         document.getElementById('start-screen').style.display = 'none';
-        this.players = [new Player(0, false), new Player(1, false)];
+        this.players = [
+            new Player(0, false, 'bottom'),
+            new Player(1, false, 'top'),
+            // 后续可以扩展4人
+            // new Player(2, false, 'left'),
+            // new Player(3, false, 'right'),
+        ];
         this.dealInitialCards();
         this.currentPlayerIndex = 0;
         this.lastPlay = null;
         this.lastPlayPlayer = null;
         this.passCount = 0;
         this.isFirstRound = true;
+        this.playedCardsStack = [];
         this.startTurn();
         this.lastTime = performance.now();
         this.gameLoop();
@@ -48,13 +56,17 @@ const Game = {
 
     startAI() {
         document.getElementById('start-screen').style.display = 'none';
-        this.players = [new Player(0, false), new Player(1, true)];
+        this.players = [
+            new Player(0, false, 'bottom'),
+            new Player(1, true, 'top'),
+        ];
         this.dealInitialCards();
         this.currentPlayerIndex = 0;
         this.lastPlay = null;
         this.lastPlayPlayer = null;
         this.passCount = 0;
         this.isFirstRound = true;
+        this.playedCardsStack = [];
         this.startTurn();
         this.lastTime = performance.now();
         this.gameLoop();
@@ -81,18 +93,14 @@ const Game = {
             this.players[i].isCurrentTurn = (i === this.currentPlayerIndex);
         }
         this.currentPlayer.deselectAll();
-        this.updateUI();
         
-        // 检查是否必须出牌（上一手是自己出的，或者第一轮）
         if (this.lastPlayPlayer === this.currentPlayer || this.isFirstRound) {
             this.lastPlay = null;
             this.passCount = 0;
         }
+        this.updateUI();
     },
 
-    /**
-     * 出牌 - 需要符合扑克规则
-     */
     playSelectedCards() {
         const player = this.currentPlayer;
         if (!player.isCurrentTurn || player.isAI) return;
@@ -103,10 +111,8 @@ const Game = {
             return;
         }
 
-        // 验证牌型
         const validation = PokerRules.validatePlay(selected, this.lastPlay);
         if (!validation.valid) {
-            // 给出具体错误提示
             const handType = PokerRules.getHandType(selected);
             if (!handType) {
                 this.showMsg('无效的牌型');
@@ -120,11 +126,17 @@ const Game = {
             return;
         }
 
-        // 出牌成功
-        for (const card of selected) player.playCard(card);
+        // 出牌成功 - 添加到显示栈
+        for (const card of selected) {
+            player.playCard(card);
+            this.playedCardsStack.push({
+                card: card,
+                playerId: player.id,
+                time: Date.now()
+            });
+        }
         player.deselectAll();
         
-        // 更新上一手
         this.lastPlay = { type: validation.type, rank: validation.rank, cards: selected };
         this.lastPlayPlayer = player;
         this.passCount = 0;
@@ -132,21 +144,14 @@ const Game = {
 
         this.showMsg(`玩家${player.id + 1} 出了 ${PokerRules.getTypeName(validation.type)}`);
 
-        // 检查胜利
         if (this.checkVictory()) return;
-
-        // 结束回合
         setTimeout(() => this.endTurn(), 800);
     },
 
-    /**
-     * 不要 - 跳过
-     */
     passTurn() {
         const player = this.currentPlayer;
         if (!player.isCurrentTurn || player.isAI) return;
 
-        // 第一轮不能跳过
         if (this.isFirstRound && !this.lastPlay) {
             this.showMsg('第一轮必须出牌');
             return;
@@ -154,15 +159,14 @@ const Game = {
 
         player.deselectAll();
         this.passCount++;
-        
         this.showMsg(`玩家${player.id + 1} 不要`);
 
-        // 如果所有人都跳过，重新开始新一轮
         if (this.passCount >= this.players.length - 1) {
             setTimeout(() => {
                 this.lastPlay = null;
                 this.lastPlayPlayer = null;
                 this.passCount = 0;
+                this.playedCardsStack = []; // 新一轮清空出牌区
                 this.endTurn();
             }, 400);
         } else {
@@ -178,6 +182,9 @@ const Game = {
         this.startTurn();
     },
 
+    /**
+     * 生产单位 - 在玩家基地位置生成
+     */
     spawnUnit(type) {
         const player = this.currentPlayer;
         if (!player.isCurrentTurn) return;
@@ -186,12 +193,34 @@ const Game = {
         if (player.isPopulationFull()) { this.showMsg('人口已满!'); return; }
 
         player.spendSupply(config.cost);
+        
+        // 根据玩家位置确定出生点
+        let baseX, baseY;
+        const margin = 180;
         const cx = this.canvas.width / 2;
-        const baseY = player.side === 'bottom' ? this.canvas.height - 60 : 60;
-        const unit = new Unit(type, player, cx + (Math.random() - 0.5) * 100, baseY);
+        const cy = this.canvas.height / 2;
+        
+        switch (player.side) {
+            case 'bottom':
+                baseX = cx + (Math.random() - 0.5) * 200;
+                baseY = this.canvas.height - margin - 20;
+                break;
+            case 'top':
+                baseX = cx + (Math.random() - 0.5) * 200;
+                baseY = margin + 20;
+                break;
+            case 'left':
+                baseX = margin + 20;
+                baseY = cy + (Math.random() - 0.5) * 200;
+                break;
+            case 'right':
+                baseX = this.canvas.width - margin - 20;
+                baseY = cy + (Math.random() - 0.5) * 200;
+                break;
+        }
+        
+        const unit = new Unit(type, player, baseX, baseY);
         player.addUnit(unit);
-
-        console.log(`Spawned ${type} for Player ${player.id} at y=${baseY}`);
         this.showMsg(`玩家${player.id + 1} 生产了 ${config.name}`);
     },
 
@@ -213,25 +242,34 @@ const Game = {
 
     updateUI() {
         const cp = this.currentPlayer;
-        document.getElementById('turn-text').textContent =
-            `玩家 ${cp.id + 1} 的回合` + (cp.isAI ? ' (AI思考中...)' : '');
+        const turnText = document.getElementById('turn-text');
+        if (turnText) {
+            turnText.textContent = `玩家 ${cp.id + 1} 的回合` + (cp.isAI ? ' (AI)' : '');
+        }
         
-        // 显示上一手信息
-        const lastPlayText = this.lastPlay ? 
-            `上一手: ${PokerRules.getTypeName(this.lastPlay.type)}` : 
-            '新一轮，任意出牌';
-        document.getElementById('last-play').textContent = lastPlayText;
+        const lastPlayEl = document.getElementById('last-play');
+        if (lastPlayEl) {
+            lastPlayEl.textContent = this.lastPlay ? 
+                `上一手: ${PokerRules.getTypeName(this.lastPlay.type)}` : 
+                '新一轮，任意出牌';
+        }
         
-        document.getElementById('p1-supply').textContent = Math.floor(this.players[0].supply);
-        document.getElementById('p1-cards').textContent = this.players[0].hand.length;
-        document.getElementById('p2-supply').textContent = Math.floor(this.players[1].supply);
-        document.getElementById('p2-cards').textContent = this.players[1].hand.length;
+        const p1Supply = document.getElementById('p1-supply');
+        const p1Cards = document.getElementById('p1-cards');
+        const p2Supply = document.getElementById('p2-supply');
+        const p2Cards = document.getElementById('p2-cards');
         
-        // 出牌按钮状态
+        if (p1Supply) p1Supply.textContent = Math.floor(this.players[0].supply);
+        if (p1Cards) p1Cards.textContent = this.players[0].hand.length;
+        if (p2Supply) p2Supply.textContent = Math.floor(this.players[1]?.supply || 0);
+        if (p2Cards) p2Cards.textContent = this.players[1]?.hand.length || 0;
+        
         const selectedCount = cp.getSelectedCards().length;
         const canPass = !this.isFirstRound || this.lastPlay;
-        document.getElementById('btn-play').disabled = (selectedCount === 0 || cp.isAI);
-        document.getElementById('btn-pass').disabled = (!canPass || cp.isAI);
+        const btnPlay = document.getElementById('btn-play');
+        const btnPass = document.getElementById('btn-pass');
+        if (btnPlay) btnPlay.disabled = (selectedCount === 0 || cp.isAI);
+        if (btnPass) btnPass.disabled = (!canPass || cp.isAI);
     },
 
     gameLoop(currentTime = 0) {
@@ -246,8 +284,6 @@ const Game = {
         if (this.winner) return;
         if (this.isTurnActive) {
             this.turnTimer += dt;
-            const left = Math.max(0, Math.ceil((this.turnDuration - this.turnTimer) / 1000));
-            document.getElementById('turn-timer').textContent = left + 's';
             if (this.turnTimer >= this.turnDuration) {
                 this.showMsg('超时! 自动跳过');
                 this.passTurn();
@@ -272,62 +308,43 @@ const Game = {
         this._aiTimer = 0;
 
         const p = this.currentPlayer;
-        
-        // AI策略：找能出的牌
         const validPlays = this.findValidPlays(p.hand);
         
         if (validPlays.length > 0 && Math.random() < 0.7) {
-            // 70%概率出牌
             const play = validPlays[Math.floor(Math.random() * validPlays.length)];
             for (const card of play) card.isSelected = true;
             this.playSelectedCards();
+        } else if (Math.random() < 0.3 && p.canAfford(CONSTANTS.UNITS.INFANTRY.cost)) {
+            this.spawnUnit('infantry');
         } else {
-            // 跳过或生产单位
-            if (Math.random() < 0.3 && p.canAfford(CONSTANTS.UNITS.INFANTRY.cost)) {
-                this.spawnUnit('infantry');
-            } else {
-                this.passTurn();
-            }
+            this.passTurn();
         }
     },
 
-    /**
-     * 找出所有能出的牌组合
-     */
     findValidPlays(hand) {
         const plays = [];
-        
-        // 单张
         for (const card of hand) {
-            const validation = PokerRules.validatePlay([card], this.lastPlay);
-            if (validation.valid) plays.push([card]);
+            if (PokerRules.validatePlay([card], this.lastPlay).valid) plays.push([card]);
         }
-        
-        // 对子
         for (let i = 0; i < hand.length; i++) {
             for (let j = i + 1; j < hand.length; j++) {
                 if (hand[i].getValue() === hand[j].getValue()) {
                     const pair = [hand[i], hand[j]];
-                    const validation = PokerRules.validatePlay(pair, this.lastPlay);
-                    if (validation.valid) plays.push(pair);
+                    if (PokerRules.validatePlay(pair, this.lastPlay).valid) plays.push(pair);
                 }
             }
         }
-        
-        // 三条
         for (let i = 0; i < hand.length; i++) {
             for (let j = i + 1; j < hand.length; j++) {
                 for (let k = j + 1; k < hand.length; k++) {
                     if (hand[i].getValue() === hand[j].getValue() && 
                         hand[j].getValue() === hand[k].getValue()) {
                         const triple = [hand[i], hand[j], hand[k]];
-                        const validation = PokerRules.validatePlay(triple, this.lastPlay);
-                        if (validation.valid) plays.push(triple);
+                        if (PokerRules.validatePlay(triple, this.lastPlay).valid) plays.push(triple);
                     }
                 }
             }
         }
-        
         return plays;
     },
 
@@ -358,6 +375,7 @@ const Game = {
         this.lastPlayPlayer = null;
         this.passCount = 0;
         this.isFirstRound = true;
+        this.playedCardsStack = [];
         document.getElementById('msg-overlay').classList.remove('show');
         this.start();
     }
