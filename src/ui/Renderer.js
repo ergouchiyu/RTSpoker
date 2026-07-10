@@ -1,5 +1,6 @@
 /**
- * 渲染器
+ * 渲染器 - 重写版
+ * 支持框选显示和回合信息
  */
 class Renderer {
     constructor(canvas) {
@@ -83,6 +84,13 @@ class Renderer {
         // 人口
         ctx.fillStyle = CONSTANTS.COLORS.TEXT;
         ctx.fillText(`人口: ${player.population}/${player.maxPopulation}`, x + 10, y + 65);
+        
+        // 回合指示
+        if (player.isCurrentTurn) {
+            ctx.fillStyle = '#2ecc71';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText('当前回合', x + 150, y + 25);
+        }
     }
     
     /**
@@ -108,6 +116,19 @@ class Renderer {
             canvas.width / 2,
             55
         );
+        
+        // 绘制回合计时器
+        if (game.isTurnActive) {
+            const timeLeft = Math.ceil((game.turnDuration - game.turnTimer) / 1000);
+            ctx.fillStyle = timeLeft < 10 ? '#e74c3c' : '#fff';
+            ctx.font = '16px Arial';
+            ctx.fillText(`剩余时间: ${timeLeft}秒`, canvas.width / 2, 80);
+        }
+        
+        // 绘制操作提示
+        ctx.fillStyle = '#aaa';
+        ctx.font = '12px Arial';
+        ctx.fillText('左键: 框选单位/选中牌 | 右键: 指挥单位攻击', canvas.width / 2, canvas.height - 20);
     }
     
     /**
@@ -155,6 +176,9 @@ class Renderer {
         
         // 绘制游戏状态
         this.drawGameState(game);
+        
+        // 绘制框选框
+        game.inputHandler.drawSelectionBox(this.ctx);
         
         // 绘制胜利界面
         if (game.winner) {

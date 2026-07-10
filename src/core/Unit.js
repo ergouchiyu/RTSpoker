@@ -1,5 +1,6 @@
 /**
- * 单位类
+ * 单位类 - 重写版
+ * 支持选中状态和指挥系统
  */
 class Unit {
     constructor(type, owner, x, y) {
@@ -26,6 +27,9 @@ class Unit {
         this.target = null; // 目标牌或单位
         this.state = 'idle'; // idle, moving, attacking, stealing
         
+        // 选中状态
+        this.isSelected = false;
+        
         // 动画
         this.animFrame = 0;
         this.animTimer = 0;
@@ -37,6 +41,7 @@ class Unit {
     moveTo(x, y) {
         this.targetX = x;
         this.targetY = y;
+        this.target = null;
         this.state = 'moving';
     }
     
@@ -52,7 +57,7 @@ class Unit {
      * 获取是否是工程师
      */
     isEngineer() {
-        this.type === 'engineer';
+        return this.type === 'engineer';
     }
     
     /**
@@ -108,7 +113,7 @@ class Unit {
             
             // 如果有攻击目标，开始攻击
             if (this.target) {
-                if (this.type === 'engineer' && this.canSteal(this.target)) {
+                if (this.isEngineer() && this.canSteal(this.target)) {
                     this.state = 'stealing';
                 } else {
                     this.state = 'attacking';
@@ -150,7 +155,6 @@ class Unit {
         }
         
         // 工程师偷取牌
-        // 这里简化处理：直接将牌转移到自己手中
         this.stealCard(this.target);
     }
     
@@ -221,10 +225,18 @@ class Unit {
             this.drawEngineer(ctx);
         }
         
+        // 绘制选中状态
+        if (this.isSelected) {
+            this.drawSelection(ctx);
+        }
+        
         // 绘制血条
         if (this.hp < this.maxHp) {
             this.drawHpBar(ctx);
         }
+        
+        // 绘制状态指示
+        this.drawStateIndicator(ctx);
         
         ctx.restore();
     }
@@ -278,6 +290,54 @@ class Unit {
         ctx.fillStyle = '#95a5a6';
         ctx.fillRect(this.x + this.size - 2, this.y - 5, 12, 4);
         ctx.fillRect(this.x + this.size + 8, this.y - 8, 4, 10);
+    }
+    
+    /**
+     * 绘制选中状态
+     */
+    drawSelection(ctx) {
+        // 选中圆圈
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size + 5, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // 选中指示器
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y - this.size - 10, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    /**
+     * 绘制状态指示
+     */
+    drawStateIndicator(ctx) {
+        let indicator = '';
+        let color = '#fff';
+        
+        switch (this.state) {
+            case 'moving':
+                indicator = '→';
+                color = '#3498db';
+                break;
+            case 'attacking':
+                indicator = '⚔';
+                color = '#e74c3c';
+                break;
+            case 'stealing':
+                indicator = '🔧';
+                color = '#f1c40f';
+                break;
+        }
+        
+        if (indicator) {
+            ctx.fillStyle = color;
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(indicator, this.x, this.y - this.size - 5);
+        }
     }
     
     /**
