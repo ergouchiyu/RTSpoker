@@ -1,5 +1,5 @@
 /**
- * 渲染器 - 修复牌显示 + 降低经济
+ * 渲染器 - 简化版，UI用HTML，Canvas只画游戏内容
  */
 class Renderer {
     constructor(canvas) {
@@ -8,329 +8,219 @@ class Renderer {
         this.resize();
         window.addEventListener('resize', () => this.resize());
     }
-
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
     }
 
-    clear() {
-        this.ctx.fillStyle = '#1a1a2e';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-
-    drawTable() {
+    render(game) {
         const { ctx, canvas } = this;
         const w = canvas.width;
         const h = canvas.height;
-        const margin = 180;
+
+        // 清屏
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, w, h);
 
         // 中央战场
         ctx.fillStyle = '#16213e';
-        ctx.fillRect(margin, margin, w - margin * 2, h - margin * 2);
+        ctx.fillRect(120, 40, w - 240, h - 100);
         ctx.strokeStyle = '#2c3e50';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(margin, margin, w - margin * 2, h - margin * 2);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(120, 40, w - 240, h - 100);
 
-        // 四个玩家区域
-        ctx.fillStyle = 'rgba(233, 69, 96, 0.1)';
-        ctx.fillRect(0, 0, w, margin);
-        ctx.fillStyle = 'rgba(78, 205, 196, 0.1)';
-        ctx.fillRect(0, h - margin, w, margin);
-        ctx.fillStyle = 'rgba(52, 152, 219, 0.1)';
-        ctx.fillRect(0, margin, margin, h - margin * 2);
-        ctx.fillStyle = 'rgba(155, 89, 182, 0.1)';
-        ctx.fillRect(w - margin, margin, margin, h - margin * 2);
+        // 玩家基地背景
+        for (const p of game.players) {
+            this.drawBase(p, w, h);
+        }
+
+        // 手牌（每个玩家）
+        for (const p of game.players) {
+            this.drawHand(p);
+        }
+
+        // 出牌区
+        this.drawPlayArea(game);
+
+        // 单位
+        for (const p of game.players) {
+            for (const u of p.units) {
+                if (!u.dead) u.draw(ctx);
+            }
+        }
+
+        // 框选框
+        game.inputHandler.drawSelectionBox(ctx);
+
+        // 操作提示
+        ctx.fillStyle = '#555';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('左键选牌→出牌 | 框选兵→右键敌方牌攻击', w / 2, h - 2);
     }
 
-    drawPlayerBase(player) {
-        const { ctx, canvas } = this;
-        const margin = 180;
-        let x, y, w, h;
+    drawBase(player, w, h) {
+        const { ctx } = this;
+        const margin = 120;
+        let x, y, bw, bh;
 
         switch (player.side) {
             case 'bottom':
-                x = margin; y = canvas.height - margin;
-                w = canvas.width - margin * 2; h = margin;
+                x = margin; y = h - margin + 10;
+                bw = w - margin * 2; bh = margin - 10;
                 break;
             case 'top':
                 x = margin; y = 0;
-                w = canvas.width - margin * 2; h = margin;
+                bw = w - margin * 2; bh = 40;
                 break;
             case 'left':
-                x = 0; y = margin;
-                w = margin; h = canvas.height - margin * 2;
+                x = 0; y = 40;
+                bw = margin; bh = h - 100;
                 break;
             case 'right':
-                x = canvas.width - margin; y = margin;
-                w = margin; h = canvas.height - margin * 2;
+                x = w - margin; y = 40;
+                bw = margin; bh = h - 100;
                 break;
         }
 
-        const color = player.id === 0 ? '#e94560' : 
-                      player.id === 1 ? '#4ecdc4' : 
-                      player.id === 2 ? '#3498db' : '#9b59b6';
-        
-        // 背景
-        ctx.fillStyle = player.isCurrentTurn ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.3)';
-        ctx.fillRect(x, y, w, h);
-        
-        // 边框
+        const color = player.id === 0 ? '#e94560' : '#4ecdc4';
+        ctx.fillStyle = player.isCurrentTurn ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.2)';
+        ctx.fillRect(x, y, bw, bh);
+
         if (player.isCurrentTurn) {
             ctx.strokeStyle = color;
-            ctx.lineWidth = 3;
-            ctx.strokeRect(x, y, w, h);
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, bw, bh);
         }
 
-        // 玩家信息
+        // 玩家名和信息
         ctx.fillStyle = color;
-        ctx.font = 'bold 18px Arial';
+        ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        const cx = x + bw / 2;
+        const cy = y + bh / 2;
 
-        const cx = x + w / 2;
-        const cy = y + h / 2;
-
-        ctx.fillText(`玩家 ${player.id + 1}`, cx, cy - 30);
-        
-        ctx.fillStyle = '#fff';
-        ctx.font = '14px Arial';
-        ctx.fillText(`补给: ${Math.floor(player.supply)}`, cx, cy);
-        ctx.fillText(`手牌: ${player.hand.length}`, cx, cy + 20);
-
-        if (player.isCurrentTurn) {
-            ctx.fillStyle = '#2ecc71';
-            ctx.font = 'bold 14px Arial';
-            ctx.fillText('当前回合', cx, cy - 50);
-        }
-    }
-
-    /**
-     * 绘制手牌 - 这是关键！
-     */
-    drawPlayerHand(player) {
-        const { ctx } = this;
-        const cardW = 45;
-        const cardH = 65;
-        const gap = 6;
-        const total = player.hand.length * (cardW + gap) - gap;
-
-        let startX, startY;
-
-        switch (player.side) {
-            case 'bottom':
-                startX = (this.canvas.width - total) / 2;
-                startY = this.canvas.height - cardH - 15;
-                break;
-            case 'top':
-                startX = (this.canvas.width - total) / 2;
-                startY = 15;
-                break;
-            case 'left':
-                startX = 15;
-                startY = (this.canvas.height - total) / 2;
-                break;
-            case 'right':
-                startX = this.canvas.width - cardW - 15;
-                startY = (this.canvas.height - total) / 2;
-                break;
-        }
-
-        for (let i = 0; i < player.hand.length; i++) {
-            const card = player.hand[i];
-            
-            // 设置位置
-            if (player.side === 'left' || player.side === 'right') {
-                card.targetX = startX;
-                card.targetY = startY + i * (cardW + gap);
-            } else {
-                card.targetX = startX + i * (cardW + gap);
-                card.targetY = startY;
+        if (player.side === 'top') {
+            ctx.fillText(`P${player.id+1} | 补给:${Math.floor(player.supply)} | 牌:${player.hand.length}`, cx, cy);
+        } else if (player.side === 'bottom') {
+            ctx.fillText(`P${player.id+1} | 补给:${Math.floor(player.supply)} | 牌:${player.hand.length}`, cx, cy - 15);
+            if (player.isCurrentTurn) {
+                ctx.fillStyle = '#2ecc71';
+                ctx.font = '12px Arial';
+                ctx.fillText('你的回合', cx, cy + 10);
             }
-            
-            // 底部玩家看正面，其他看背面
-            card.isRevealed = (player.side === 'bottom');
-            
-            // 绘制牌
-            this.drawCard(card);
+        } else {
+            ctx.save();
+            ctx.translate(cx, cy);
+            if (player.side === 'left') ctx.rotate(-Math.PI / 2);
+            else ctx.rotate(Math.PI / 2);
+            ctx.fillText(`P${player.id+1} 牌:${player.hand.length}`, 0, 0);
+            ctx.restore();
         }
     }
 
-    /**
-     * 绘制单张牌
-     */
-    drawCard(card) {
+    drawHand(player) {
         const { ctx } = this;
-        const cardW = 45;
-        const cardH = 65;
-        const x = card.x;
-        const y = card.y;
+        const cardW = CONSTANTS.CARD_WIDTH;
+        const cardH = CONSTANTS.CARD_HEIGHT;
 
-        if (card.isRevealed) {
-            // 正面
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(x, y, cardW, cardH);
-            
-            ctx.strokeStyle = card.isSelected ? '#2ecc71' : '#333';
-            ctx.lineWidth = card.isSelected ? 3 : 1;
-            ctx.strokeRect(x, y, cardW, cardH);
+        for (const card of player.hand) {
+            const x = card.x;
+            const y = card.y;
 
-            const isRed = card.suit === '♥' || card.suit === '♦';
-            ctx.fillStyle = isRed ? '#e74c3c' : '#2c3e50';
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(card.rank, x + cardW / 2, y + cardH / 2 - 8);
-            ctx.font = '16px Arial';
-            ctx.fillText(card.suit, x + cardW / 2, y + cardH / 2 + 10);
-        } else {
-            // 背面
-            ctx.fillStyle = '#e94560';
-            ctx.fillRect(x, y, cardW, cardH);
-            ctx.strokeStyle = '#c0392b';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(x, y, cardW, cardH);
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('🂠', x + cardW / 2, y + cardH / 2);
-        }
+            if (card.isRevealed) {
+                // 正面
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(x, y, cardW, cardH);
+                ctx.strokeStyle = card.isSelected ? '#2ecc71' : '#666';
+                ctx.lineWidth = card.isSelected ? 3 : 1;
+                ctx.strokeRect(x, y, cardW, cardH);
 
-        // 选中高亮
-        if (card.isSelected) {
-            ctx.strokeStyle = '#2ecc71';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(x - 2, y - 2, cardW + 4, cardH + 4);
+                const isRed = card.suit === '♥' || card.suit === '♦';
+                ctx.fillStyle = isRed ? '#e74c3c' : '#2c3e50';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(card.rank, x + cardW / 2, y + cardH / 2 - 8);
+                ctx.font = '16px Arial';
+                ctx.fillText(card.suit, x + cardW / 2, y + cardH / 2 + 10);
+
+                if (card.isSelected) {
+                    ctx.strokeStyle = '#2ecc71';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x - 2, y - 2, cardW + 4, cardH + 4);
+                }
+            } else {
+                // 背面
+                ctx.fillStyle = '#c0392b';
+                ctx.fillRect(x, y, cardW, cardH);
+                ctx.strokeStyle = '#922b21';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x, y, cardW, cardH);
+                ctx.fillStyle = '#e74c3c';
+                ctx.fillRect(x + 5, y + 5, cardW - 10, cardH - 10);
+            }
         }
     }
 
     drawPlayArea(game) {
         const { ctx, canvas } = this;
         const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
+        const cy = canvas.height / 2 - 20;
 
-        // 出牌区标题
-        ctx.fillStyle = '#666';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('出牌区', cx, cy - 90);
-
-        // 绘制已出的牌
-        if (game.playedCardsStack && game.playedCardsStack.length > 0) {
-            const stack = game.playedCardsStack;
-            const cardW = 40;
-            const cardH = 55;
-            const maxShow = 15;
-            const startIdx = Math.max(0, stack.length - maxShow);
-            const gap = 25;
-
-            for (let i = startIdx; i < stack.length; i++) {
-                const entry = stack[i];
-                const offset = (i - startIdx) * gap;
-                const px = cx - (Math.min(maxShow, stack.length) * gap / 2) + offset;
-                const py = cy - cardH / 2;
-
-                // 牌背景
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(px, py, cardW, cardH);
-                
-                const color = entry.playerId === 0 ? '#e94560' : '#4ecdc4';
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.strokeRect(px, py, cardW, cardH);
-
-                // 牌面
-                ctx.fillStyle = color;
-                ctx.font = 'bold 14px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(entry.card.rank, px + cardW / 2, py + cardH / 2 - 6);
-                ctx.font = '12px Arial';
-                ctx.fillText(entry.card.suit, px + cardW / 2, py + cardH / 2 + 10);
-            }
+        if (!game.playedCardsStack || game.playedCardsStack.length === 0) {
+            ctx.fillStyle = '#444';
+            ctx.font = '13px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('出牌区', cx, cy);
+            return;
         }
 
-        // 上一手信息
+        const stack = game.playedCardsStack;
+        const cardW = 38;
+        const cardH = 52;
+        const gap = 22;
+        const maxShow = 18;
+        const startIdx = Math.max(0, stack.length - maxShow);
+        const showCount = Math.min(maxShow, stack.length);
+        const totalW = showCount * gap;
+        const startX = cx - totalW / 2;
+
+        for (let i = startIdx; i < stack.length; i++) {
+            const entry = stack[i];
+            const offset = (i - startIdx) * gap;
+            const px = startX + offset;
+            const py = cy - cardH / 2;
+
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(px, py, cardW, cardH);
+            const color = entry.playerId === 0 ? '#e94560' : '#4ecdc4';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px, py, cardW, cardH);
+
+            const isRed = entry.card.suit === '♥' || entry.card.suit === '♦';
+            ctx.fillStyle = isRed ? '#e74c3c' : '#2c3e50';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(entry.card.rank, px + cardW / 2, py + cardH / 2 - 5);
+            ctx.font = '14px Arial';
+            ctx.fillText(entry.card.suit, px + cardW / 2, py + cardH / 2 + 10);
+        }
+
+        // 上一手提示
         if (game.lastPlay) {
             ctx.fillStyle = '#e94560';
-            ctx.font = 'bold 16px Arial';
+            ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(`上一手: ${PokerRules.getTypeName(game.lastPlay.type)}`, cx, cy + 50);
+            ctx.fillText(`上一手: ${PokerRules.getTypeName(game.lastPlay.type)}`, cx, cy + 45);
         } else {
             ctx.fillStyle = '#2ecc71';
-            ctx.font = '14px Arial';
+            ctx.font = '13px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('新一轮，任意出牌', cx, cy + 50);
+            ctx.fillText('新一轮，任意出牌', cx, cy + 45);
         }
-    }
-
-    drawUnits(game) {
-        for (const player of game.players) {
-            for (const unit of player.units) {
-                if (!unit.dead) unit.draw(this.ctx);
-            }
-        }
-    }
-
-    drawUI(game) {
-        const { ctx, canvas } = this;
-
-        // 回合信息
-        const cp = game.currentPlayer;
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 20px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`玩家 ${cp.id + 1} 的回合`, canvas.width / 2, 30);
-
-        // 计时器
-        const timeLeft = Math.max(0, Math.ceil((game.turnDuration - game.turnTimer) / 1000));
-        ctx.fillStyle = timeLeft < 10 ? '#e74c3c' : '#aaa';
-        ctx.font = '14px Arial';
-        ctx.fillText(`${timeLeft}s`, canvas.width / 2, 55);
-    }
-
-    drawVictory(player) {
-        const { ctx, canvas } = this;
-        ctx.fillStyle = 'rgba(0,0,0,0.8)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#2ecc71';
-        ctx.font = 'bold 48px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`玩家 ${player.id + 1} 获胜！`, canvas.width / 2, canvas.height / 2);
-        ctx.fillStyle = '#fff';
-        ctx.font = '24px Arial';
-        ctx.fillText('点击重新开始', canvas.width / 2, canvas.height / 2 + 50);
-    }
-
-    render(game) {
-        this.clear();
-        this.drawTable();
-
-        // 绘制玩家基地
-        for (const player of game.players) {
-            this.drawPlayerBase(player);
-        }
-
-        // 绘制手牌
-        for (const player of game.players) {
-            this.drawPlayerHand(player);
-        }
-
-        // 绘制出牌区
-        this.drawPlayArea(game);
-
-        // 绘制单位
-        this.drawUnits(game);
-
-        // 框选框
-        game.inputHandler.drawSelectionBox(this.ctx);
-
-        // UI
-        this.drawUI(game);
-
-        // 胜利
-        if (game.winner) this.drawVictory(game.winner);
     }
 }

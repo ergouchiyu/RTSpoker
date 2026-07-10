@@ -1,7 +1,5 @@
 /**
- * 输入处理器
- * 左键框选单位 / 左键点选手牌
- * 右键指挥单位攻击
+ * 输入处理器 - 修复：只能选自己兵、右键攻击
  */
 class InputHandler {
     constructor(canvas, game) {
@@ -31,8 +29,8 @@ class InputHandler {
         if (this.game.winner) { this.game.restart(); return; }
         const pos = this.getMousePos(e);
         this.isSelecting = true;
-        this.selectStart = pos;
-        this.selectEnd = pos;
+        this.selectStart = { ...pos };
+        this.selectEnd = { ...pos };
     }
 
     onMouseMove(e) {
@@ -53,24 +51,24 @@ class InputHandler {
         }
     }
 
-    /** 单击：选中手牌（不自动出牌，需要点出牌按钮） */
+    /** 单击：选中/取消手牌 */
     handleClick(pos) {
         const cp = this.game.currentPlayer;
         if (!cp.isCurrentTurn) return;
 
-        // 检查是否点了手牌
         for (const card of cp.hand) {
             if (card.containsPoint(pos.x, pos.y)) {
                 card.isSelected = !card.isSelected;
+                this.game.updateUI();
                 return;
             }
         }
-
-        // 点了空地，取消所有选中
+        // 点空地取消选牌
         cp.deselectAll();
+        this.game.updateUI();
     }
 
-    /** 框选：选择己方单位 */
+    /** 框选：只能选自己的单位 */
     handleBoxSelect() {
         const cp = this.game.currentPlayer;
         const rx = Math.min(this.selectStart.x, this.selectEnd.x);
@@ -78,35 +76,48 @@ class InputHandler {
         const rw = Math.abs(this.selectEnd.x - this.selectStart.x);
         const rh = Math.abs(this.selectEnd.y - this.selectStart.y);
 
+        // 先清除所有选中
+        for (const u of this.selectedUnits) u.isSelected = false;
         this.selectedUnits = [];
+
+        // 只选自己的单位
         for (const u of cp.units) {
-            if (Helpers.pointInRect(u.x, u.y, rx, ry, rw, rh)) {
+            if (!u.dead && Helpers.pointInRect(u.x, u.y, rx, ry, rw, rh)) {
                 this.selectedUnits.push(u);
                 u.isSelected = true;
-            } else {
-                u.isSelected = false;
             }
         }
+        console.log(`Selected ${this.selectedUnits.length} own units`);
     }
 
     /** 右键：指挥选中单位 */
     onRightClick(e) {
         const pos = this.getMousePos(e);
-        if (this.selectedUnits.length === 0) return;
+        if (this.selectedUnits.length === 0) {
+            console.log('No units selected');
+            return;
+        }
 
-        // 检查是否点了敌方的牌
-        for (const p of this.game.players) {
-            if (p === this.game.currentPlayer) continue;
-            for (const card of p.hand) {
+        const cp = this.game.currentPlayer;
+
+        // 检查是否右键了敌方的牌
+        for (const player of this.game.players) {
+            if (player === cp) continue; // 跳过自己
+            for (const card of player.hand) {
                 if (card.containsPoint(pos.x, pos.y)) {
-                    for (const u of this.selectedUnits) u.attackTarget(card);
+                    // 指挥单位攻击这张牌
+                    for (const u of this.selectedUnits) {
+                        u.attackTarget(card);
+                    }
+                    console.log(`Commanding ${this.selectedUnits.length} units to attack card ${card.getDisplayText()}`);
+                    this.game.showMsg(`攻击 ${card.getDisplayText()}!`);
                     return;
                 }
             }
         }
 
         // 没点牌，移动到该位置
-        const spacing = 20;
+        const spacing = 25;
         for (let i = 0; i < this.selectedUnits.length; i++) {
             const row = Math.floor(i / 5);
             const col = i % 5;
@@ -115,14 +126,15 @@ class InputHandler {
                 pos.y + row * spacing
             );
         }
+        console.log(`Moving ${this.selectedUnits.length} units`);
     }
 
     /** 绘制框选框 */
     drawSelectionBox(ctx) {
         if (!this.isSelecting) return;
-        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
         ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
+        ctx.setLineDash([4, 4]);
         ctx.strokeRect(
             this.selectStart.x, this.selectStart.y,
             this.selectEnd.x - this.selectStart.x,
