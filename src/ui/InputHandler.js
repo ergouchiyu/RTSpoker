@@ -1,14 +1,14 @@
 /**
- * 输入处理器 - 修复：只能选自己兵、右键攻击
+ * 输入处理器 - 严格限制只能操作自己的单位
  */
 class InputHandler {
     constructor(canvas, game) {
         this.canvas = canvas;
         this.game = game;
         this.isSelecting = false;
-        this.selectStart = { x: 0, y: 0 };
-        this.selectEnd = { x: 0, y: 0 };
-        this.selectedUnits = [];
+        this.selectStart = {x:0,y:0};
+        this.selectEnd = {x:0,y:0};
+        this.selectedUnits = [];  // 当前选中的单位（只可能是当前玩家的）
         this.bindEvents();
     }
 
@@ -18,44 +18,44 @@ class InputHandler {
     }
 
     bindEvents() {
-        this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
-        this.canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.onRightClick(e); });
+        this.canvas.addEventListener('mousedown', e => { if (e.button===0) this.onLeftDown(e); });
+        this.canvas.addEventListener('mousemove', e => this.onMove(e));
+        this.canvas.addEventListener('mouseup', e => { if (e.button===0) this.onLeftUp(e); });
+        this.canvas.addEventListener('contextmenu', e => { e.preventDefault(); this.onRightClick(e); });
     }
 
-    onMouseDown(e) {
-        if (e.button !== 0) return;
+    /** 清除所有选中状态 */
+    clearSelection() {
+        this.selectedUnits.forEach(u => u.isSelected = false);
+        this.selectedUnits = [];
+    }
+
+    onLeftDown(e) {
         if (this.game.winner) { this.game.restart(); return; }
         const pos = this.getMousePos(e);
         this.isSelecting = true;
-        this.selectStart = { ...pos };
-        this.selectEnd = { ...pos };
+        this.selectStart = {...pos};
+        this.selectEnd = {...pos};
     }
 
-    onMouseMove(e) {
+    onMove(e) {
         if (this.isSelecting) this.selectEnd = this.getMousePos(e);
     }
 
-    onMouseUp(e) {
-        if (e.button !== 0 || !this.isSelecting) return;
+    onLeftUp(e) {
+        if (!this.isSelecting) return;
         this.isSelecting = false;
         const pos = this.getMousePos(e);
         const dx = Math.abs(pos.x - this.selectStart.x);
         const dy = Math.abs(pos.y - this.selectStart.y);
-
-        if (dx < 5 && dy < 5) {
-            this.handleClick(pos);
-        } else {
-            this.handleBoxSelect();
-        }
+        if (dx < 5 && dy < 5) this.handleClick(pos);
+        else this.handleBoxSelect();
     }
 
-    /** 单击：选中/取消手牌 */
+    /** 点击：选中/取消手牌 */
     handleClick(pos) {
         const cp = this.game.currentPlayer;
         if (!cp.isCurrentTurn) return;
-
         for (const card of cp.hand) {
             if (card.containsPoint(pos.x, pos.y)) {
                 card.isSelected = !card.isSelected;
@@ -63,70 +63,53 @@ class InputHandler {
                 return;
             }
         }
-        // 点空地取消选牌
         cp.deselectAll();
         this.game.updateUI();
     }
 
-    /** 框选：只能选自己的单位 */
+    /** 框选：只选自己的单位 */
     handleBoxSelect() {
         const cp = this.game.currentPlayer;
+        this.clearSelection();
+
         const rx = Math.min(this.selectStart.x, this.selectEnd.x);
         const ry = Math.min(this.selectStart.y, this.selectEnd.y);
         const rw = Math.abs(this.selectEnd.x - this.selectStart.x);
         const rh = Math.abs(this.selectEnd.y - this.selectStart.y);
 
-        // 先清除所有选中
-        for (const u of this.selectedUnits) u.isSelected = false;
-        this.selectedUnits = [];
-
-        // 只选自己的单位
+        // 只遍历当前玩家的单位
         for (const u of cp.units) {
             if (!u.dead && Helpers.pointInRect(u.x, u.y, rx, ry, rw, rh)) {
                 this.selectedUnits.push(u);
                 u.isSelected = true;
             }
         }
-        console.log(`Selected ${this.selectedUnits.length} own units`);
     }
 
-    /** 右键：指挥选中单位 */
+    /** 右键：指挥选中的单位 */
     onRightClick(e) {
         const pos = this.getMousePos(e);
-        if (this.selectedUnits.length === 0) {
-            console.log('No units selected');
-            return;
-        }
+        if (this.selectedUnits.length === 0) return;
 
         const cp = this.game.currentPlayer;
 
-        // 检查是否右键了敌方的牌
+        // 检查是否点了敌方的牌
         for (const player of this.game.players) {
-            if (player === cp) continue; // 跳过自己
+            if (player.id === cp.id) continue;  // 跳过自己
             for (const card of player.hand) {
                 if (card.containsPoint(pos.x, pos.y)) {
-                    // 指挥单位攻击这张牌
-                    for (const u of this.selectedUnits) {
-                        u.attackTarget(card);
-                    }
-                    console.log(`Commanding ${this.selectedUnits.length} units to attack card ${card.getDisplayText()}`);
+                    this.selectedUnits.forEach(u => u.attackTarget(card));
                     this.game.showMsg(`攻击 ${card.getDisplayText()}!`);
                     return;
                 }
             }
         }
 
-        // 没点牌，移动到该位置
+        // 移动到空地
         const spacing = 25;
-        for (let i = 0; i < this.selectedUnits.length; i++) {
-            const row = Math.floor(i / 5);
-            const col = i % 5;
-            this.selectedUnits[i].moveTo(
-                pos.x + (col - 2) * spacing,
-                pos.y + row * spacing
-            );
-        }
-        console.log(`Moving ${this.selectedUnits.length} units`);
+        this.selectedUnits.forEach((u, i) => {
+            u.moveTo(pos.x + (i % 5 - 2) * spacing, pos.y + Math.floor(i / 5) * spacing);
+        });
     }
 
     /** 绘制框选框 */
@@ -134,7 +117,7 @@ class InputHandler {
         if (!this.isSelecting) return;
         ctx.strokeStyle = 'rgba(255,255,255,0.6)';
         ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
+        ctx.setLineDash([4,4]);
         ctx.strokeRect(
             this.selectStart.x, this.selectStart.y,
             this.selectEnd.x - this.selectStart.x,
