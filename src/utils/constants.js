@@ -1,25 +1,24 @@
 /**
- * 游戏常量配置
+ * 游戏常量配置 - 降低经济速度
  */
 const CONSTANTS = {
     CANVAS_WIDTH: 1200,
     CANVAS_HEIGHT: 800,
     FPS: 60,
     
-    // 扑克设置 - 缩小尺寸
     CARD_WIDTH: 45,
     CARD_HEIGHT: 65,
     CARD_HP: 100,
-    CARD_INCOME_BASE: 2,
+    CARD_INCOME_BASE: 0.5,  // 从2降到0.5
     
     INITIAL_HAND_SIZE: 10,
     MAX_POPULATION: 10,
-    INITIAL_SUPPLY: 200,
+    INITIAL_SUPPLY: 100,    // 从200降到100
     
     UNITS: {
         INFANTRY: {
             name: '步兵',
-            cost: 100,
+            cost: 80,        // 从100降到80
             hp: 100,
             attack: 5,
             speed: 1.5,
@@ -28,7 +27,7 @@ const CONSTANTS = {
         },
         ENGINEER: {
             name: '工程师',
-            cost: 300,
+            cost: 200,       // 从300降到200
             hp: 50,
             attack: 0,
             speed: 1,
@@ -39,13 +38,14 @@ const CONSTANTS = {
     },
     
     REPAIR_SPEED: 2,
-    REPAIR_COST: 2,
+    REPAIR_COST: 1,          // 从2降到1
     
+    // 动态收入表 - 大幅降低
     INCOME_TABLE: {
-        20: 2,
-        15: 2.5,
-        10: 3,
-        5: 5
+        20: 0.5,             // 从2降到0.5
+        15: 0.6,             // 从2.5降到0.6
+        10: 0.8,             // 从3降到0.8
+        5: 1.0               // 从5降到1.0
     },
     
     COLORS: {
