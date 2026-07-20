@@ -1,9 +1,9 @@
 ## 游戏常量
 class_name GameConst
 
-# 牌尺寸
-const CARD_WIDTH := 50
-const CARD_HEIGHT := 70
+# 牌尺寸 (用浮点数)
+const CARD_WIDTH := 50.0
+const CARD_HEIGHT := 70.0
 
 # 玩家颜色
 const PLAYER_COLORS := [Color.RED, Color.CYAN, Color.BLUE, Color.PURPLE]
@@ -11,7 +11,7 @@ const PLAYER_NAMES := ["玩家1(下)", "玩家2(上)", "玩家3(左)", "玩家4(
 const PLAYER_SIDES := ["bottom", "top", "left", "right"]
 
 # 单位配置
-const INFANTRY_COST := 80
+const INFANTRY_COST := 80.0
 const INFANTRY_HP := 100.0
 const INFANTRY_ATTACK := 5.0
 const INFANTRY_SPEED := 100.0
