@@ -83,7 +83,7 @@ func _update_moving(delta: float):
 		if attack_target and is_instance_valid(attack_target):
 			state = State.ATTACKING
 		else:
-			state = State.IDLO
+			state = State.IDLE
 	else:
 		position += direction * move_speed * delta
 
