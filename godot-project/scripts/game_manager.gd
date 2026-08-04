@@ -3,7 +3,7 @@ class_name GameManager
 extends Node
 
 # 玩家数据
-var players: Array[Dictionary] = []
+var players: Array = []
 var current_player_index: int = 0
 var is_game_over: bool = false
 
@@ -13,11 +13,11 @@ var last_play_rank: int = 0
 var last_play_player_id: int = -1
 var pass_count: int = 0
 var is_first_round: bool = true
-var played_stack: Array[Dictionary] = []
+var played_stack: Array = []
 
 # 选中状态
-var selected_cards: Array[Card] = []
-var selected_units: Array[Unit] = []
+var selected_cards: Array = []
+var selected_units: Array = []
 
 # 回合计时
 var turn_timer: float = 0.0
@@ -28,13 +28,15 @@ var main_scene: Node2D
 
 # 信号
 signal turn_changed(player_id: int)
-signal game_over(winner_id: int)
-signal message(text: String)
+signal game_over_signal(winner_id: int)
+signal message_signal(text: String)
 
 func _ready():
 	main_scene = get_parent()
-	# 添加到组，方便其他节点找到
 	add_to_group("game_manager")
+	# 不在这里启动游戏，等 Main._ready() 连好信号后再启动
+
+func start_game():
 	_start_game(false)
 
 func _start_game(vs_ai: bool):
@@ -75,20 +77,20 @@ func _start_game(vs_ai: bool):
 	_start_turn()
 
 func _deal_cards():
-	var deck := _create_deck()
+	var deck = _create_deck()
 	deck.shuffle()
-	var idx := 0
+	var idx = 0
 	for p in players:
-		p.hand.clear()
+		p["hand"].clear()
 		for j in range(GameConst.INITIAL_HAND_SIZE):
 			var d = deck[idx]
-			var card := Card.new(d.suit, d.rank, p.id)
-			p.hand.append(card)
+			var card = Card.new(d["suit"], d["rank"], p["id"])
+			p["hand"].append(card)
 			main_scene.add_child(card)
 			idx += 1
 
 func _create_deck() -> Array:
-	var deck := []
+	var deck = []
 	for suit in GameConst.SUITS:
 		for rank in GameConst.RANKS:
 			deck.append({"suit": suit, "rank": rank})
@@ -101,14 +103,14 @@ func _start_turn():
 	turn_timer = 0.0
 	_clear_selection()
 	
-	var cp := get_current_player()
+	var cp = get_current_player()
 	
-	if last_play_player_id == cp.id or is_first_round:
+	if last_play_player_id == cp["id"] or is_first_round:
 		last_play_type = ""
 		last_play_rank = 0
 		pass_count = 0
 	
-	turn_changed.emit(cp.id)
+	turn_changed.emit(cp["id"])
 
 func _end_turn():
 	_clear_selection()
@@ -126,13 +128,12 @@ func _clear_selection():
 			unit.is_selected = false
 	selected_units.clear()
 
-## 选中卡牌（由Card的输入事件调用）
-func select_card(card: Card):
-	var cp := get_current_player()
-	if card.owner_id != cp.id:
-		return  # 不能选别人的牌
+## 选中卡牌
+func select_card(card):
+	var cp = get_current_player()
+	if card.owner_id != cp["id"]:
+		return
 	
-	# 如果已经有选中的单位，先清除
 	if not selected_units.is_empty():
 		_clear_selection()
 	
@@ -142,17 +143,15 @@ func select_card(card: Card):
 	else:
 		selected_cards.erase(card)
 
-## 选中单位（由Unit的输入事件调用）
-func select_unit(unit: Unit):
-	var cp := get_current_player()
-	if unit.owner_id != cp.id:
-		return  # 不能选别人的单位
+## 选中单位
+func select_unit(unit):
+	var cp = get_current_player()
+	if unit.owner_id != cp["id"]:
+		return
 	
-	# 如果已经有选中的牌，先清除
 	if not selected_cards.is_empty():
 		_clear_selection()
 	
-	# 如果按住Shift可以多选，否则清除之前的选择
 	if not Input.is_key_pressed(KEY_SHIFT):
 		for u in selected_units:
 			if is_instance_valid(u):
@@ -167,69 +166,67 @@ func select_unit(unit: Unit):
 
 ## 框选单位
 func select_units_in_rect(rect: Rect2):
-	var cp := get_current_player()
+	var cp = get_current_player()
 	
-	# 如果已经有选中的牌，先清除
 	if not selected_cards.is_empty():
 		_clear_selection()
 	else:
-		# 清除之前的单位选择
 		for unit in selected_units:
 			if is_instance_valid(unit):
 				unit.is_selected = false
 		selected_units.clear()
 	
-	for unit in cp.units:
+	for unit in cp["units"]:
 		if is_instance_valid(unit) and rect.has_point(unit.position):
 			unit.is_selected = true
 			selected_units.append(unit)
 
 ## 出牌
 func play_selected_cards():
-	var cp := get_current_player()
-	if cp.is_ai:
+	var cp = get_current_player()
+	if cp["is_ai"]:
 		return
 	if selected_cards.is_empty():
-		message.emit("请先选择要出的牌")
+		message_signal.emit("请先选择要出的牌")
 		return
 	
-	var validation := _validate_play(selected_cards)
-	if not validation.valid:
-		message.emit(validation.reason)
+	var validation = _validate_play(selected_cards)
+	if not validation["valid"]:
+		message_signal.emit(validation["reason"])
 		return
 	
 	for card in selected_cards:
-		_remove_card_from_hand(card, cp.id)
-		played_stack.append({"card": card, "player_id": cp.id})
+		_remove_card_from_hand(card, cp["id"])
+		played_stack.append({"card": card, "player_id": cp["id"]})
 	
 	_clear_selection()
-	last_play_type = validation.type
-	last_play_rank = validation.rank
-	last_play_player_id = cp.id
+	last_play_type = validation["type"]
+	last_play_rank = validation["rank"]
+	last_play_player_id = cp["id"]
 	pass_count = 0
 	is_first_round = false
 	
-	message.emit("玩家%d 出了 %s" % [cp.id + 1, validation.type])
+	message_signal.emit("玩家%d 出了 %s" % [cp["id"] + 1, validation["type"]])
 	
-	if cp.hand.is_empty():
+	if cp["hand"].is_empty():
 		is_game_over = true
-		game_over.emit(cp.id)
+		game_over_signal.emit(cp["id"])
 		return
 	
 	_end_turn()
 
 ## 不要
 func pass_turn():
-	var cp := get_current_player()
-	if cp.is_ai:
+	var cp = get_current_player()
+	if cp["is_ai"]:
 		return
 	if is_first_round and last_play_type == "":
-		message.emit("第一轮必须出牌")
+		message_signal.emit("第一轮必须出牌")
 		return
 	
 	_clear_selection()
 	pass_count += 1
-	message.emit("玩家%d 不要" % [cp.id + 1])
+	message_signal.emit("玩家%d 不要" % [cp["id"] + 1])
 	
 	if pass_count >= players.size() - 1:
 		last_play_type = ""
@@ -237,34 +234,34 @@ func pass_turn():
 		last_play_player_id = -1
 		pass_count = 0
 		for entry in played_stack:
-			if is_instance_valid(entry.card):
-				entry.card.queue_free()
+			if is_instance_valid(entry["card"]):
+				entry["card"].queue_free()
 		played_stack.clear()
 	
 	_end_turn()
 
 ## 生产单位
 func spawn_unit():
-	var cp := get_current_player()
-	if cp.supply < GameConst.INFANTRY_COST:
-		message.emit("补给不足!")
+	var cp = get_current_player()
+	if cp["supply"] < GameConst.INFANTRY_COST:
+		message_signal.emit("补给不足!")
 		return
 	
-	cp.supply -= GameConst.INFANTRY_COST
+	cp["supply"] -= GameConst.INFANTRY_COST
 	
-	var spawn_pos := _get_spawn_position(cp)
-	var unit := Unit.new(cp.id, "infantry", spawn_pos)
-	cp.units.append(unit)
+	var spawn_pos = _get_spawn_position(cp)
+	var unit = Unit.new(cp["id"], "infantry", spawn_pos)
+	cp["units"].append(unit)
 	main_scene.add_child(unit)
 	
-	message.emit("玩家%d 生产了步兵" % [cp.id + 1])
+	message_signal.emit("玩家%d 生产了步兵" % [cp["id"] + 1])
 
 func _get_spawn_position(player: Dictionary) -> Vector2:
-	var viewport_size := main_scene.get_viewport_rect().size
-	var cx := viewport_size.x / 2
-	var cy := viewport_size.y / 2
+	var viewport_size = main_scene.get_viewport_rect().size
+	var cx = viewport_size.x / 2.0
+	var cy = viewport_size.y / 2.0
 	
-	match player.side:
+	match player["side"]:
 		"bottom":
 			return Vector2(cx + randf_range(-100, 100), viewport_size.y - 120)
 		"top":
@@ -276,13 +273,13 @@ func _get_spawn_position(player: Dictionary) -> Vector2:
 	return Vector2(cx, cy)
 
 ## 指挥单位攻击
-func command_units_attack_card(target_card: Card):
+func command_units_attack_card(target_card):
 	if selected_units.is_empty():
 		return
 	
-	var cp := get_current_player()
-	if target_card.owner_id == cp.id:
-		message.emit("不能攻击自己的牌!")
+	var cp = get_current_player()
+	if target_card.owner_id == cp["id"]:
+		message_signal.emit("不能攻击自己的牌!")
 		return
 	
 	for unit in selected_units:
@@ -295,30 +292,30 @@ func command_units_move_to(pos: Vector2):
 			unit.move_to(pos)
 
 ## 验证出牌
-func _validate_play(cards: Array[Card]) -> Dictionary:
+func _validate_play(cards: Array) -> Dictionary:
 	if cards.is_empty():
 		return {"valid": false, "reason": "没有牌"}
 	
-	var hand_info := _get_hand_type(cards)
-	if not hand_info.valid:
+	var hand_info = _get_hand_type(cards)
+	if not hand_info["valid"]:
 		return {"valid": false, "reason": "无效牌型"}
 	
 	if last_play_type == "":
-		return {"valid": true, "type": hand_info.type, "rank": hand_info.rank, "reason": ""}
+		return {"valid": true, "type": hand_info["type"], "rank": hand_info["rank"], "reason": ""}
 	
-	if hand_info.type != last_play_type:
+	if hand_info["type"] != last_play_type:
 		return {"valid": false, "reason": "必须出" + last_play_type}
 	
-	if hand_info.rank <= last_play_rank:
+	if hand_info["rank"] <= last_play_rank:
 		return {"valid": false, "reason": "必须比上家大"}
 	
-	return {"valid": true, "type": hand_info.type, "rank": hand_info.rank, "reason": ""}
+	return {"valid": true, "type": hand_info["type"], "rank": hand_info["rank"], "reason": ""}
 
-func _get_hand_type(cards: Array[Card]) -> Dictionary:
+func _get_hand_type(cards: Array) -> Dictionary:
 	if cards.is_empty():
 		return {"valid": false}
 	
-	var values := []
+	var values = []
 	for card in cards:
 		values.append(card.get_value())
 	values.sort()
@@ -333,7 +330,7 @@ func _get_hand_type(cards: Array[Card]) -> Dictionary:
 		return {"valid": true, "type": "三条", "rank": values[0]}
 	
 	if cards.size() >= 5:
-		var is_straight := true
+		var is_straight = true
 		for i in range(1, values.size()):
 			if values[i] != values[i-1] + 1:
 				is_straight = false
@@ -350,21 +347,24 @@ func _process(delta: float):
 	if is_game_over:
 		return
 	
+	if players.is_empty():
+		return
+	
 	turn_timer += delta
 	if turn_timer >= turn_duration:
-		message.emit("超时!")
+		message_signal.emit("超时!")
 		pass_turn()
 	
 	_update_economy(delta)
 
 func _update_economy(delta: float):
 	for p in players:
-		var income := 0.0
-		for card in p.hand:
+		var income = 0.0
+		for card in p["hand"]:
 			if is_instance_valid(card):
 				income += card.get_income(GameConst.CARD_INCOME_BASE)
-		p.supply += income * delta
+		p["supply"] += income * delta
 
-func _remove_card_from_hand(card: Card, player_id: int):
-	var player := players[player_id]
-	player.hand.erase(card)
+func _remove_card_from_hand(card, player_id: int):
+	var player = players[player_id]
+	player["hand"].erase(card)
