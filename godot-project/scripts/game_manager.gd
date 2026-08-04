@@ -342,9 +342,8 @@ func _ai_take_action():
 	ai_state = "done"
 	_end_turn()
 
-func _ai_find_play(hand: Array) -> Array:
+func _ai_find_play(hand: Array) -> Variant:
 	# 简单AI：找最小的合法牌型
-	# 先找单张
 	var cards_by_value = []
 	for card in hand:
 		cards_by_value.append(card)
