@@ -198,9 +198,12 @@ func _draw_hands():
 		for i in range(cc):
 			var card = hand[i]
 			if is_instance_valid(card):
+				# 跳过已出到出牌区的牌
+				if card.in_play_area:
+					continue
 				var cy_offset = 0.0
 				if card.is_selected:
-					cy_offset = -20.0  # 选中牌上移20像素
+					cy_offset = -20.0
 				card.position = Vector2(sx + i * (GameConst.CARD_WIDTH + 6), sy + cy_offset)
 				card.is_face_up = (player["side"] == "bottom")
 

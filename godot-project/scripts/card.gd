@@ -9,6 +9,7 @@ var hp: float = 100.0
 var max_hp: float = 100.0
 var is_selected: bool = false
 var is_face_up: bool = false
+var in_play_area: bool = false  # 是否在出牌区（防止被_draw_hands翻回去）
 
 func _init(s: String = "", r: String = "", oid: int = -1):
 	suit = s
