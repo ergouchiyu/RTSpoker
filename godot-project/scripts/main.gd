@@ -136,8 +136,6 @@ func _handle_left_release():
 	queue_redraw()
 
 func _handle_right_click(pos: Vector2):
-	# 检查是否点在敌方牌上
-	var human = game_manager.players[0]
 	var ai = game_manager.players[1]
 	
 	for card in ai["hand"]:
@@ -200,7 +198,10 @@ func _draw_hands():
 		for i in range(cc):
 			var card = hand[i]
 			if is_instance_valid(card):
-				card.position = Vector2(sx + i * (GameConst.CARD_WIDTH + 6), sy)
+				var cy_offset = 0.0
+				if card.is_selected:
+					cy_offset = -20.0  # 选中牌上移20像素
+				card.position = Vector2(sx + i * (GameConst.CARD_WIDTH + 6), sy + cy_offset)
 				card.is_face_up = (player["side"] == "bottom")
 
 func _draw_play_area():
@@ -219,6 +220,7 @@ func _draw_play_area():
 		var card = entry["card"]
 		if is_instance_valid(card):
 			card.position = Vector2(sx + i * 22, cy - 26)
+			# 出牌区的牌全部正面朝上，这样能看到AI出了什么
 			card.is_face_up = true
 
 func _draw_selection_box():

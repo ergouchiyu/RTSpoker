@@ -25,7 +25,7 @@ var main_scene: Node2D
 var ai_action_timer: float = 0.0
 var ai_action_delay: float = 1.5  # AI 行动前等待 1.5 秒
 var ai_state: String = "idle"  # idle, thinking, acting, done
-var ai_supply_threshold: float = 100.0  # AI 攒够100补给就造兵
+var ai_supply_threshold: float = 80.0  # AI 攒够80补给就造兵（降低门槛让AI更积极）
 
 signal turn_changed_signal(player_id: int)
 signal game_over_signal(winner_id: int)
@@ -209,9 +209,11 @@ func play_selected_cards():
 		message_signal.emit(validation["reason"])
 		return
 	
+	var card_names = []
 	for card in selected_cards:
 		_remove_card_from_hand(card, 0)
 		played_stack.append({"card": card, "player_id": 0})
+		card_names.append(card.suit + card.rank)
 	
 	_clear_selection()
 	last_play_type = validation["type"]
@@ -220,7 +222,7 @@ func play_selected_cards():
 	pass_count = 0
 	is_first_round = false
 	
-	message_signal.emit("你出了 %s" % validation["type"])
+	message_signal.emit("你出了 %s (%s)" % [validation["type"], " ".join(card_names)])
 	
 	var cp = get_current_player()
 	if cp["hand"].is_empty():
@@ -318,15 +320,17 @@ func _ai_take_action():
 	
 	if play != null:
 		# 出牌
+		var card_names = []
 		for card in play:
 			_remove_card_from_hand(card, 1)
 			played_stack.append({"card": card, "player_id": 1})
+			card_names.append(card.suit + card.rank)
 		last_play_type = _get_hand_type(play)["type"]
 		last_play_rank = _get_hand_type(play)["rank"]
 		last_play_player_id = 1
 		pass_count = 0
 		is_first_round = false
-		message_signal.emit("AI出了 %s" % last_play_type)
+		message_signal.emit("AI出了 %s (%s)" % [last_play_type, " ".join(card_names)])
 		
 		if ai["hand"].is_empty():
 			is_game_over = true

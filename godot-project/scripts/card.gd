@@ -54,7 +54,9 @@ func _draw():
 		draw_rect(rect, Color.BLACK, false, 1.0)
 	
 	if is_selected:
-		draw_rect(rect, Color.GREEN, false, 3.0)
+		# 金色粗边框 + 外发光
+		draw_rect(rect, Color(1, 0.84, 0), false, 4.0)
+		draw_rect(Rect2(Vector2(-3, -3), Vector2(GameConst.CARD_WIDTH + 6, GameConst.CARD_HEIGHT + 6)), Color(1, 0.84, 0, 0.3), false, 2.0)
 	
 	if hp < max_hp:
 		var bw = GameConst.CARD_WIDTH - 4.0
