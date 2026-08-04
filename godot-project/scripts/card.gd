@@ -1,4 +1,4 @@
-## 扑克牌类 - 带碰撞体积
+## 扑克牌 - owner_id 创建时绑定，不可变
 class_name Card
 extends Area2D
 
@@ -16,13 +16,12 @@ func _init(s: String = "", r: String = "", oid: int = -1):
 	owner_id = oid
 
 func _ready():
-	var collision_shape = CollisionShape2D.new()
-	var rect_shape = RectangleShape2D.new()
-	rect_shape.size = Vector2(GameConst.CARD_WIDTH, GameConst.CARD_HEIGHT)
-	collision_shape.shape = rect_shape
-	collision_shape.position = Vector2(GameConst.CARD_WIDTH / 2.0, GameConst.CARD_HEIGHT / 2.0)
-	add_child(collision_shape)
-	
+	var col = CollisionShape2D.new()
+	var shape = RectangleShape2D.new()
+	shape.size = Vector2(GameConst.CARD_WIDTH, GameConst.CARD_HEIGHT)
+	col.shape = shape
+	col.position = Vector2(GameConst.CARD_WIDTH / 2.0, GameConst.CARD_HEIGHT / 2.0)
+	add_child(col)
 	input_event.connect(_on_input_event)
 
 func _on_input_event(_viewport, event, _shape_idx):
@@ -58,9 +57,9 @@ func _draw():
 		draw_rect(rect, Color.GREEN, false, 3.0)
 	
 	if hp < max_hp:
-		var bar_width = GameConst.CARD_WIDTH - 4.0
-		var bar_height = 4.0
-		var bar_pos = Vector2(2, GameConst.CARD_HEIGHT + 2)
-		draw_rect(Rect2(bar_pos, Vector2(bar_width, bar_height)), Color.DARK_GRAY)
-		var hp_color = Color.GREEN if hp / max_hp > 0.5 else Color.RED
-		draw_rect(Rect2(bar_pos, Vector2(bar_width * hp / max_hp, bar_height)), hp_color)
+		var bw = GameConst.CARD_WIDTH - 4.0
+		var bh = 4.0
+		var bp = Vector2(2, GameConst.CARD_HEIGHT + 2)
+		draw_rect(Rect2(bp, Vector2(bw, bh)), Color.DARK_GRAY)
+		var hc = Color.GREEN if hp / max_hp > 0.5 else Color.RED
+		draw_rect(Rect2(bp, Vector2(bw * hp / max_hp, bh)), hc)

@@ -1,4 +1,4 @@
-## 单位类 - 带碰撞体积，可单击选中
+## 单位 - owner_id 创建时绑定，不可变
 class_name Unit
 extends Area2D
 
@@ -21,7 +21,6 @@ func _init(oid: int = -1, utype: String = "infantry", pos: Vector2 = Vector2.ZER
 	unit_type = utype
 	position = pos
 	target_position = pos
-	
 	if utype == "infantry":
 		hp = GameConst.INFANTRY_HP
 		max_hp = GameConst.INFANTRY_HP
@@ -29,12 +28,11 @@ func _init(oid: int = -1, utype: String = "infantry", pos: Vector2 = Vector2.ZER
 		move_speed = GameConst.INFANTRY_SPEED
 
 func _ready():
-	var collision_shape = CollisionShape2D.new()
-	var circle_shape = CircleShape2D.new()
-	circle_shape.radius = 15.0
-	collision_shape.shape = circle_shape
-	add_child(collision_shape)
-	
+	var col = CollisionShape2D.new()
+	var shape = CircleShape2D.new()
+	shape.radius = 15.0
+	col.shape = shape
+	add_child(col)
 	input_event.connect(_on_input_event)
 
 func _on_input_event(_viewport, event, _shape_idx):
@@ -63,23 +61,21 @@ func attack_card(card):
 	state = State.MOVING
 
 func _update_moving(delta: float):
-	var target_pos = Vector2.ZERO
+	var tp = Vector2.ZERO
 	if attack_target and is_instance_valid(attack_target):
-		target_pos = attack_target.global_position + Vector2(GameConst.CARD_WIDTH / 2.0, GameConst.CARD_HEIGHT / 2.0)
+		tp = attack_target.global_position + Vector2(GameConst.CARD_WIDTH / 2.0, GameConst.CARD_HEIGHT / 2.0)
 	else:
-		target_pos = target_position
+		tp = target_position
 	
-	var direction = (target_pos - position).normalized()
-	var distance = position.distance_to(target_pos)
-	
-	if distance < 5.0:
-		position = target_pos
+	var dist = position.distance_to(tp)
+	if dist < 5.0:
+		position = tp
 		if attack_target and is_instance_valid(attack_target):
 			state = State.ATTACKING
 		else:
 			state = State.IDLE
 	else:
-		position += direction * move_speed * delta
+		position += (tp - position).normalized() * move_speed * delta
 
 func _update_attacking(delta: float):
 	if not attack_target or not is_instance_valid(attack_target):
@@ -110,9 +106,9 @@ func _draw():
 		draw_string(ThemeDB.fallback_font, Vector2(-6, -18), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.YELLOW)
 	
 	if hp < max_hp:
-		var bar_width = 24.0
-		var bar_height = 3.0
-		var bar_pos = Vector2(-bar_width / 2.0, -18)
-		draw_rect(Rect2(bar_pos, Vector2(bar_width, bar_height)), Color.DARK_GRAY)
-		var hp_color = Color.GREEN if hp / max_hp > 0.5 else Color.RED
-		draw_rect(Rect2(bar_pos, Vector2(bar_width * hp / max_hp, bar_height)), hp_color)
+		var bw = 24.0
+		var bh = 3.0
+		var bp = Vector2(-bw / 2.0, -18)
+		draw_rect(Rect2(bp, Vector2(bw, bh)), Color.DARK_GRAY)
+		var hc = Color.GREEN if hp / max_hp > 0.5 else Color.RED
+		draw_rect(Rect2(bp, Vector2(bw * hp / max_hp, bh)), hc)
