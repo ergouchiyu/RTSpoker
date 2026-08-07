@@ -356,26 +356,74 @@ func _ai_take_action():
 	_end_turn()
 
 func _ai_find_play(hand: Array) -> Variant:
-	# AI 策略：炸弹优先 > 正常出牌 > 最小单张
+	# AI 策略优先级：
+	# 1. 叉/勾（同点数循环争夺，优先）
+	# 2. 正常出最小合法牌
+	# 3. 炸弹（只在没办法时才用）
 	var cards_by_value = []
 	for card in hand:
 		cards_by_value.append(card)
 	cards_by_value.sort_custom(func(a, b): return a.get_value() < b.get_value())
 	
-	# 1. 尝试大火箭 AA4
+	# 1. 上家是单张X -> 尝试叉（出对子XX）
+	if last_play_type == "单张":
+		for i in range(cards_by_value.size() - 1):
+			if cards_by_value[i].get_value() == last_play_rank and \
+			   cards_by_value[i+1].get_value() == last_play_rank:
+				return [cards_by_value[i], cards_by_value[i+1]]
+	
+	# 2. 上家是岔对子XX -> 尝试勾（出单张X）
+	if last_play_type == "岔对子":
+		for card in cards_by_value:
+			if card.get_value() == last_play_rank:
+				return [card]
+		# 没有单张X，尝试用三张XXX升级
+		for i in range(cards_by_value.size() - 2):
+			if cards_by_value[i].get_value() == last_play_rank:
+				return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2]]
+	
+	# 3. 上家是勾单张X -> 尝试叉（出对子XX）
+	if last_play_type == "勾单张":
+		for i in range(cards_by_value.size() - 1):
+			if cards_by_value[i].get_value() == last_play_rank and \
+			   cards_by_value[i+1].get_value() == last_play_rank:
+				return [cards_by_value[i], cards_by_value[i+1]]
+		# 没有对子XX，尝试用三张XXX升级
+		for i in range(cards_by_value.size() - 2):
+			if cards_by_value[i].get_value() == last_play_rank:
+				return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2]]
+	
+	# 4. 正常出最小合法牌
+	for card in cards_by_value:
+		var play = [card]
+		var validation = _validate_play(play)
+		if validation["valid"]:
+			return play
+	
+	# 5. 尝试对子
+	for i in range(cards_by_value.size() - 1):
+		if cards_by_value[i].get_value() == cards_by_value[i+1].get_value():
+			var play = [cards_by_value[i], cards_by_value[i+1]]
+			var validation = _validate_play(play)
+			if validation["valid"]:
+				return play
+	
+	# 6. 实在没办法，出炸弹（大火箭 > 小火箭 > 双王 > 四炸 > 三炸）
 	var a_cards = []
 	var four_cards = []
 	for card in cards_by_value:
 		if card.rank == "A": a_cards.append(card)
 		if card.rank == "4": four_cards.append(card)
+	
+	# 大火箭 AA4
 	if a_cards.size() >= 2 and four_cards.size() >= 1:
 		return [a_cards[0], a_cards[1], four_cards[0]]
 	
-	# 2. 尝试小火箭 A44
+	# 小火箭 A44
 	if a_cards.size() >= 1 and four_cards.size() >= 2:
 		return [a_cards[0], four_cards[0], four_cards[1]]
 	
-	# 3. 尝试双王
+	# 双王
 	var small_joker = null
 	var big_joker = null
 	for card in cards_by_value:
@@ -384,25 +432,18 @@ func _ai_find_play(hand: Array) -> Variant:
 	if small_joker != null and big_joker != null:
 		return [small_joker, big_joker]
 	
-	# 4. 尝试四张炸弹
+	# 四张炸弹
 	for i in range(cards_by_value.size() - 3):
 		if cards_by_value[i].get_value() == cards_by_value[i+1].get_value() and \
 		   cards_by_value[i+1].get_value() == cards_by_value[i+2].get_value() and \
 		   cards_by_value[i+2].get_value() == cards_by_value[i+3].get_value():
 			return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2], cards_by_value[i+3]]
 	
-	# 5. 尝试三张炸弹
+	# 三张炸弹
 	for i in range(cards_by_value.size() - 2):
 		if cards_by_value[i].get_value() == cards_by_value[i+1].get_value() and \
 		   cards_by_value[i+1].get_value() == cards_by_value[i+2].get_value():
 			return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2]]
-	
-	# 6. 正常出最小合法牌
-	for card in cards_by_value:
-		var play = [card]
-		var validation = _validate_play(play)
-		if validation["valid"]:
-			return play
 	
 	return null
 
@@ -482,12 +523,50 @@ func _validate_play(cards: Array) -> Dictionary:
 		# 双方都是炸弹，比炸弹等级
 		if new_power > last_power:
 			return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
+		elif new_power == last_power:
+			# 同级炸弹比点数
+			if hi["rank"] > last_play_rank:
+				return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
+			else:
+				return {"valid": false, "reason": "炸弹点数不够大"}
 		else:
-			return {"valid": false, "reason": "炸弹不够大"}
+			return {"valid": false, "reason": "炸弹等级不够"}
 	
 	if new_power > 0 and last_power == 0:
 		# 炸弹管普通牌
 		return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
+	
+	# === 岔/勾规则（同点数牌的循环争夺）===
+	
+	# 叉：上家出单张X，你出对子XX（同点数）
+	if last_play_type == "单张" and hi["type"] == "对子" and hi["rank"] == last_play_rank:
+		return {"valid": true, "type": "岔对子", "rank": hi["rank"], "reason": ""}
+	
+	# 勾：上家是岔对子XX，你出单张X（同点数）
+	if last_play_type == "岔对子" and hi["type"] == "单张" and hi["rank"] == last_play_rank:
+		return {"valid": true, "type": "勾单张", "rank": hi["rank"], "reason": ""}
+	
+	# 叉：上家是勾单张X，你出对子XX（同点数，继续循环）
+	if last_play_type == "勾单张" and hi["type"] == "对子" and hi["rank"] == last_play_rank:
+		return {"valid": true, "type": "岔对子", "rank": hi["rank"], "reason": ""}
+	
+	# === 三张炸弹的岔/勾延伸 ===
+	# 上家是岔对子XX，你出三张XXX（同点数，升级为三张炸弹）
+	if last_play_type == "岔对子" and hi["type"] == "三张炸弹" and hi["rank"] == last_play_rank:
+		return {"valid": true, "type": "三张炸弹", "rank": hi["rank"], "reason": ""}
+	
+	# 上家是勾单张X，你出三张XXX（同点数，升级为三张炸弹）
+	if last_play_type == "勾单张" and hi["type"] == "三张炸弹" and hi["rank"] == last_play_rank:
+		return {"valid": true, "type": "三张炸弹", "rank": hi["rank"], "reason": ""}
+	
+	# === 普通牌型规则 ===
+	# 岔对子只能被同点数单张勾或炸弹打断
+	if last_play_type == "岔对子":
+		return {"valid": false, "reason": "只能用单张%d勾或炸弹" % last_play_rank}
+	
+	# 勾单张只能被同点数对子岔或炸弹打断
+	if last_play_type == "勾单张":
+		return {"valid": false, "reason": "只能用对子%d岔或炸弹" % last_play_rank}
 	
 	# 普通牌型：必须同牌型且比上家大
 	if hi["type"] != last_play_type:
