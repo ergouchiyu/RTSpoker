@@ -223,8 +223,10 @@ func _draw_play_area():
 		var card = entry["card"]
 		if is_instance_valid(card):
 			card.position = Vector2(sx + i * 22, cy - 26)
-			# 出牌区的牌全部正面朝上，这样能看到AI出了什么
-			card.is_face_up = true
+			# 出牌区的牌全部正面朝上
+			if not card.is_face_up:
+				card.is_face_up = true
+				card.queue_redraw()  # Godot 4 改属性必须手动触发重绘
 
 func _draw_selection_box():
 	if is_selecting:

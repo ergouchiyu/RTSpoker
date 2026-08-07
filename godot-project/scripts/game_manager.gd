@@ -213,6 +213,8 @@ func play_selected_cards():
 	for card in selected_cards:
 		_remove_card_from_hand(card, 0)
 		card.in_play_area = true
+		card.is_face_up = true
+		card.queue_redraw()
 		played_stack.append({"card": card, "player_id": 0})
 		card_names.append(card.suit + card.rank)
 	
@@ -325,6 +327,8 @@ func _ai_take_action():
 		for card in play:
 			_remove_card_from_hand(card, 1)
 			card.in_play_area = true
+			card.is_face_up = true
+			card.queue_redraw()
 			played_stack.append({"card": card, "player_id": 1})
 			card_names.append(card.suit + card.rank)
 		last_play_type = _get_hand_type(play)["type"]
