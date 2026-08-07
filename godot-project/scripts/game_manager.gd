@@ -359,17 +359,22 @@ func _ai_find_play(hand: Array) -> Variant:
 		cards_by_value.append(card)
 	cards_by_value.sort_custom(func(a, b): return a.get_value() < b.get_value())
 	
-	# 1. 尝试岔（上家是单张，出对子）
+	# 1. 尝试岔（上家是单张，必须出同点数的对子）
 	if last_play_type == "单张":
-		# 找最小的对子
+		var target_rank = last_play_rank
+		# 找同点数的对子
 		for i in range(cards_by_value.size() - 1):
-			if cards_by_value[i].get_value() == cards_by_value[i+1].get_value():
+			if cards_by_value[i].get_value() == target_rank and \
+			   cards_by_value[i+1].get_value() == target_rank:
 				return [cards_by_value[i], cards_by_value[i+1]]
 	
-	# 2. 尝试勾（上家是对子，出单张）
-	if last_play_type == "对子" or last_play_type == "对子(岔)":
-		# 出最小的单张
-		return [cards_by_value[0]]
+	# 2. 尝试勾（上家岔了，必须出同点数的单张）
+	if last_play_type == "对子(岔)":
+		var target_rank = last_play_rank
+		# 找同点数的单张
+		for card in cards_by_value:
+			if card.get_value() == target_rank:
+				return [card]
 	
 	# 3. 尝试三张炸弹（有炸弹就炸）
 	for i in range(cards_by_value.size() - 2):
@@ -473,15 +478,12 @@ func _validate_play(cards: Array) -> Dictionary:
 			return {"valid": false, "reason": "三张炸弹必须比上家大"}
 		return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
 	
-	# 岔规则：对子可以管单张（不管大小）
-	if last_play_type == "单张" and hi["type"] == "对子":
+	# 岔规则：上家出单张X，你必须出对子XX（同点数）
+	if last_play_type == "单张" and hi["type"] == "对子" and hi["rank"] == last_play_rank:
 		return {"valid": true, "type": "对子(岔)", "rank": hi["rank"], "reason": ""}
 	
-	# 勾规则：单张可以管对子（岔）（不管大小）
-	if last_play_type == "对子" and hi["type"] == "单张":
-		return {"valid": true, "type": "单张(勾)", "rank": hi["rank"], "reason": ""}
-	
-	if last_play_type == "对子(岔)" and hi["type"] == "单张":
+	# 勾规则：上家岔了（对子XX），你必须出单张X（同点数）
+	if last_play_type == "对子(岔)" and hi["type"] == "单张" and hi["rank"] == last_play_rank:
 		return {"valid": true, "type": "单张(勾)", "rank": hi["rank"], "reason": ""}
 	
 	# 正常规则：同牌型比大小
