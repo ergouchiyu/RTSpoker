@@ -353,13 +353,38 @@ func _ai_take_action():
 	_end_turn()
 
 func _ai_find_play(hand: Array) -> Variant:
-	# 简单AI：找最小的合法牌型
+	# AI 策略优先级：四张炸弹 > 三张炸弹 > 岔/勾 > 正常出牌 > 最小单张
 	var cards_by_value = []
 	for card in hand:
 		cards_by_value.append(card)
 	cards_by_value.sort_custom(func(a, b): return a.get_value() < b.get_value())
 	
-	# 尝试出最小的单张
+	# 1. 尝试岔（上家是单张，出对子）
+	if last_play_type == "单张":
+		# 找最小的对子
+		for i in range(cards_by_value.size() - 1):
+			if cards_by_value[i].get_value() == cards_by_value[i+1].get_value():
+				return [cards_by_value[i], cards_by_value[i+1]]
+	
+	# 2. 尝试勾（上家是对子，出单张）
+	if last_play_type == "对子" or last_play_type == "对子(岔)":
+		# 出最小的单张
+		return [cards_by_value[0]]
+	
+	# 3. 尝试三张炸弹（有炸弹就炸）
+	for i in range(cards_by_value.size() - 2):
+		if cards_by_value[i].get_value() == cards_by_value[i+1].get_value() and \
+		   cards_by_value[i+1].get_value() == cards_by_value[i+2].get_value():
+			return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2]]
+	
+	# 4. 尝试四张炸弹
+	for i in range(cards_by_value.size() - 3):
+		if cards_by_value[i].get_value() == cards_by_value[i+1].get_value() and \
+		   cards_by_value[i+1].get_value() == cards_by_value[i+2].get_value() and \
+		   cards_by_value[i+2].get_value() == cards_by_value[i+3].get_value():
+			return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2], cards_by_value[i+3]]
+	
+	# 5. 正常出最小合法牌
 	for card in cards_by_value:
 		var play = [card]
 		var validation = _validate_play(play)
@@ -430,12 +455,42 @@ func _validate_play(cards: Array) -> Dictionary:
 	var hi = _get_hand_type(cards)
 	if not hi["valid"]:
 		return {"valid": false, "reason": "无效牌型"}
+	
+	# 首次出牌，任意牌型都可以
 	if last_play_type == "":
 		return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
+	
+	# 炸弹规则：三张炸弹管所有非炸弹，四张炸弹管三张炸弹
+	if hi["type"] == "四张炸弹":
+		# 四张炸弹管一切
+		return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
+	
+	if hi["type"] == "三张炸弹":
+		# 三张炸弹管所有非炸弹
+		if last_play_type == "四张炸弹":
+			return {"valid": false, "reason": "四张炸弹更大"}
+		if last_play_type == "三张炸弹" and hi["rank"] <= last_play_rank:
+			return {"valid": false, "reason": "三张炸弹必须比上家大"}
+		return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
+	
+	# 岔规则：对子可以管单张（不管大小）
+	if last_play_type == "单张" and hi["type"] == "对子":
+		return {"valid": true, "type": "对子(岔)", "rank": hi["rank"], "reason": ""}
+	
+	# 勾规则：单张可以管对子（岔）（不管大小）
+	if last_play_type == "对子" and hi["type"] == "单张":
+		return {"valid": true, "type": "单张(勾)", "rank": hi["rank"], "reason": ""}
+	
+	if last_play_type == "对子(岔)" and hi["type"] == "单张":
+		return {"valid": true, "type": "单张(勾)", "rank": hi["rank"], "reason": ""}
+	
+	# 正常规则：同牌型比大小
 	if hi["type"] != last_play_type:
-		return {"valid": false, "reason": "必须出" + last_play_type}
+		return {"valid": false, "reason": "必须出" + last_play_type + "或用岔/勾/炸弹"}
+	
 	if hi["rank"] <= last_play_rank:
 		return {"valid": false, "reason": "必须比上家大"}
+	
 	return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
 
 func _get_hand_type(cards: Array) -> Dictionary:
@@ -446,12 +501,23 @@ func _get_hand_type(cards: Array) -> Dictionary:
 		values.append(card.get_value())
 	values.sort()
 	
+	# 单张
 	if cards.size() == 1:
 		return {"valid": true, "type": "单张", "rank": values[0]}
+	
+	# 对子
 	if cards.size() == 2 and values[0] == values[1]:
 		return {"valid": true, "type": "对子", "rank": values[0]}
+	
+	# 三条（可当三张炸弹）
 	if cards.size() == 3 and values[0] == values[1] and values[1] == values[2]:
-		return {"valid": true, "type": "三条", "rank": values[0]}
+		return {"valid": true, "type": "三张炸弹", "rank": values[0]}
+	
+	# 四张炸弹
+	if cards.size() == 4 and values[0] == values[1] and values[1] == values[2] and values[2] == values[3]:
+		return {"valid": true, "type": "四张炸弹", "rank": values[0]}
+	
+	# 顺子 (5张或以上连续)
 	if cards.size() >= 5:
 		var is_straight = true
 		for i in range(1, values.size()):
@@ -460,8 +526,7 @@ func _get_hand_type(cards: Array) -> Dictionary:
 				break
 		if is_straight and values[-1] < 15:
 			return {"valid": true, "type": "顺子", "rank": values[-1]}
-	if cards.size() == 4 and values[0] == values[1] and values[1] == values[2] and values[2] == values[3]:
-		return {"valid": true, "type": "炸弹", "rank": values[0]}
+	
 	return {"valid": false}
 
 func _remove_card_from_hand(card, player_id: int):
