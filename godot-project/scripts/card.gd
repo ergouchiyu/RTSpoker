@@ -32,7 +32,14 @@ func _on_input_event(_viewport, event, _shape_idx):
 			gm.select_card(self)
 
 func get_value() -> int:
+	if rank == GameConst.JOKER_SMALL:
+		return GameConst.JOKER_VALUE
+	if rank == GameConst.JOKER_BIG:
+		return GameConst.JOKER_VALUE_BIG
 	return GameConst.RANK_VALUES.get(rank, 0)
+
+func is_joker() -> bool:
+	return rank == GameConst.JOKER_SMALL or rank == GameConst.JOKER_BIG
 
 func get_income(base_income: float) -> float:
 	return base_income * (hp / max_hp)
@@ -46,9 +53,14 @@ func _draw():
 	
 	if is_face_up:
 		draw_rect(rect, Color.WHITE)
-		var color = Color.RED if (suit == "♥" or suit == "♦") else Color.BLACK
-		draw_string(ThemeDB.fallback_font, Vector2(8, 25), rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, color)
-		draw_string(ThemeDB.fallback_font, Vector2(8, 50), suit, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, color)
+		if is_joker():
+			# 王牌显示
+			var jc = Color.RED if rank == GameConst.JOKER_BIG else Color.BLACK
+			draw_string(ThemeDB.fallback_font, Vector2(4, 28), rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, jc)
+		else:
+			var color = Color.RED if (suit == "♥" or suit == "♦") else Color.BLACK
+			draw_string(ThemeDB.fallback_font, Vector2(8, 25), rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, color)
+			draw_string(ThemeDB.fallback_font, Vector2(8, 50), suit, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, color)
 	else:
 		var color: Color = GameConst.PLAYER_COLORS[owner_id]
 		draw_rect(rect, color)

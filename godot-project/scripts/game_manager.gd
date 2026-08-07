@@ -98,6 +98,9 @@ func _create_deck() -> Array:
 	for suit in GameConst.SUITS:
 		for rank in GameConst.RANKS:
 			deck.append({"suit": suit, "rank": rank})
+	# 加入大小王
+	deck.append({"suit": "", "rank": GameConst.JOKER_SMALL})
+	deck.append({"suit": "", "rank": GameConst.JOKER_BIG})
 	return deck
 
 func get_current_player() -> Dictionary:
@@ -353,34 +356,33 @@ func _ai_take_action():
 	_end_turn()
 
 func _ai_find_play(hand: Array) -> Variant:
-	# AI 策略优先级：四张炸弹 > 三张炸弹 > 岔/勾 > 正常出牌 > 最小单张
+	# AI 策略：炸弹优先 > 正常出牌 > 最小单张
 	var cards_by_value = []
 	for card in hand:
 		cards_by_value.append(card)
 	cards_by_value.sort_custom(func(a, b): return a.get_value() < b.get_value())
 	
-	# 1. 尝试岔（上家是单张，必须出同点数的对子）
-	if last_play_type == "单张":
-		var target_rank = last_play_rank
-		# 找同点数的对子
-		for i in range(cards_by_value.size() - 1):
-			if cards_by_value[i].get_value() == target_rank and \
-			   cards_by_value[i+1].get_value() == target_rank:
-				return [cards_by_value[i], cards_by_value[i+1]]
+	# 1. 尝试大火箭 AA4
+	var a_cards = []
+	var four_cards = []
+	for card in cards_by_value:
+		if card.rank == "A": a_cards.append(card)
+		if card.rank == "4": four_cards.append(card)
+	if a_cards.size() >= 2 and four_cards.size() >= 1:
+		return [a_cards[0], a_cards[1], four_cards[0]]
 	
-	# 2. 尝试勾（上家岔了，必须出同点数的单张）
-	if last_play_type == "对子(岔)":
-		var target_rank = last_play_rank
-		# 找同点数的单张
-		for card in cards_by_value:
-			if card.get_value() == target_rank:
-				return [card]
+	# 2. 尝试小火箭 A44
+	if a_cards.size() >= 1 and four_cards.size() >= 2:
+		return [a_cards[0], four_cards[0], four_cards[1]]
 	
-	# 3. 尝试三张炸弹（有炸弹就炸）
-	for i in range(cards_by_value.size() - 2):
-		if cards_by_value[i].get_value() == cards_by_value[i+1].get_value() and \
-		   cards_by_value[i+1].get_value() == cards_by_value[i+2].get_value():
-			return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2]]
+	# 3. 尝试双王
+	var small_joker = null
+	var big_joker = null
+	for card in cards_by_value:
+		if card.rank == GameConst.JOKER_SMALL: small_joker = card
+		if card.rank == GameConst.JOKER_BIG: big_joker = card
+	if small_joker != null and big_joker != null:
+		return [small_joker, big_joker]
 	
 	# 4. 尝试四张炸弹
 	for i in range(cards_by_value.size() - 3):
@@ -389,7 +391,13 @@ func _ai_find_play(hand: Array) -> Variant:
 		   cards_by_value[i+2].get_value() == cards_by_value[i+3].get_value():
 			return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2], cards_by_value[i+3]]
 	
-	# 5. 正常出最小合法牌
+	# 5. 尝试三张炸弹
+	for i in range(cards_by_value.size() - 2):
+		if cards_by_value[i].get_value() == cards_by_value[i+1].get_value() and \
+		   cards_by_value[i+1].get_value() == cards_by_value[i+2].get_value():
+			return [cards_by_value[i], cards_by_value[i+1], cards_by_value[i+2]]
+	
+	# 6. 正常出最小合法牌
 	for card in cards_by_value:
 		var play = [card]
 		var validation = _validate_play(play)
@@ -465,62 +473,114 @@ func _validate_play(cards: Array) -> Dictionary:
 	if last_play_type == "":
 		return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
 	
-	# 炸弹规则：三张炸弹管所有非炸弹，四张炸弹管三张炸弹
-	if hi["type"] == "四张炸弹":
-		# 四张炸弹管一切
+	# 炸弹体系：大火箭 > 小火箭 > 双王 > 四张炸弹 > 三张炸弹
+	# 炸弹可以管任何普通牌型，炸弹之间按等级比大小
+	var new_power = _get_bomb_power(hi)
+	var last_power = _get_bomb_power_by_type(last_play_type)
+	
+	if new_power > 0 and last_power > 0:
+		# 双方都是炸弹，比炸弹等级
+		if new_power > last_power:
+			return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
+		else:
+			return {"valid": false, "reason": "炸弹不够大"}
+	
+	if new_power > 0 and last_power == 0:
+		# 炸弹管普通牌
 		return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
 	
-	if hi["type"] == "三张炸弹":
-		# 三张炸弹管所有非炸弹
-		if last_play_type == "四张炸弹":
-			return {"valid": false, "reason": "四张炸弹更大"}
-		if last_play_type == "三张炸弹" and hi["rank"] <= last_play_rank:
-			return {"valid": false, "reason": "三张炸弹必须比上家大"}
-		return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
-	
-	# 岔规则：上家出单张X，你必须出对子XX（同点数）
-	if last_play_type == "单张" and hi["type"] == "对子" and hi["rank"] == last_play_rank:
-		return {"valid": true, "type": "对子(岔)", "rank": hi["rank"], "reason": ""}
-	
-	# 勾规则：上家岔了（对子XX），你必须出单张X（同点数）
-	if last_play_type == "对子(岔)" and hi["type"] == "单张" and hi["rank"] == last_play_rank:
-		return {"valid": true, "type": "单张(勾)", "rank": hi["rank"], "reason": ""}
-	
-	# 正常规则：同牌型比大小
+	# 普通牌型：必须同牌型且比上家大
 	if hi["type"] != last_play_type:
-		return {"valid": false, "reason": "必须出" + last_play_type + "或用岔/勾/炸弹"}
+		return {"valid": false, "reason": "必须出" + last_play_type + "或用炸弹"}
 	
 	if hi["rank"] <= last_play_rank:
 		return {"valid": false, "reason": "必须比上家大"}
 	
 	return {"valid": true, "type": hi["type"], "rank": hi["rank"], "reason": ""}
 
+# 炸弹等级：大火箭=5 > 小火箭=4 > 双王=3 > 四张炸弹=2 > 三张炸弹=1 > 非炸弹=0
+func _get_bomb_power(hi: Dictionary) -> int:
+	match hi["type"]:
+		"大火箭": return 5
+		"小火箭": return 4
+		"双王": return 3
+		"四张炸弹": return 2
+		"三张炸弹": return 1
+		_: return 0
+
+func _get_bomb_power_by_type(type_name: String) -> int:
+	match type_name:
+		"大火箭": return 5
+		"小火箭": return 4
+		"双王": return 3
+		"四张炸弹": return 2
+		"三张炸弹": return 1
+		_: return 0
+
 func _get_hand_type(cards: Array) -> Dictionary:
 	if cards.is_empty():
 		return {"valid": false}
-	var values = []
+	
+	# 统计信息
+	var values: Array = []
+	var ranks: Array = []
+	var jokers: Array = []
 	for card in cards:
+		if card.is_joker():
+			jokers.append(card)
 		values.append(card.get_value())
+		ranks.append(card.rank)
 	values.sort()
 	
+	# === 火箭系列 ===
+	# 大火箭：AA4 (两张A + 一张4)
+	if cards.size() == 3:
+		var a_count = 0
+		var four_count = 0
+		for r in ranks:
+			if r == "A": a_count += 1
+			if r == "4": four_count += 1
+		if a_count == 2 and four_count == 1:
+			return {"valid": true, "type": "大火箭", "rank": 100}
+	
+	# 小火箭：A44 (一张A + 两张4)
+	if cards.size() == 3:
+		var a_count = 0
+		var four_count = 0
+		for r in ranks:
+			if r == "A": a_count += 1
+			if r == "4": four_count += 1
+		if a_count == 1 and four_count == 2:
+			return {"valid": true, "type": "小火箭", "rank": 99}
+	
+	# 双王：小王+大王
+	if cards.size() == 2 and jokers.size() == 2:
+		return {"valid": true, "type": "双王", "rank": 98}
+	
+	# === 炸弹系列 ===
+	# 三张炸弹
+	if cards.size() == 3 and values[0] == values[1] and values[1] == values[2] and jokers.size() == 0:
+		return {"valid": true, "type": "三张炸弹", "rank": values[0]}
+	
+	# 四张炸弹
+	if cards.size() == 4 and values[0] == values[1] and values[1] == values[2] and values[2] == values[3] and jokers.size() == 0:
+		return {"valid": true, "type": "四张炸弹", "rank": values[0]}
+	
+	# === 普通牌型 ===
 	# 单张
 	if cards.size() == 1:
 		return {"valid": true, "type": "单张", "rank": values[0]}
 	
 	# 对子
-	if cards.size() == 2 and values[0] == values[1]:
+	if cards.size() == 2 and values[0] == values[1] and jokers.size() == 0:
 		return {"valid": true, "type": "对子", "rank": values[0]}
 	
-	# 三条（可当三张炸弹）
-	if cards.size() == 3 and values[0] == values[1] and values[1] == values[2]:
+	# 三条（三张相同，在三张炸弹体系里也是炸弹）
+	if cards.size() == 3 and values[0] == values[1] and values[1] == values[2] and jokers.size() == 0:
 		return {"valid": true, "type": "三张炸弹", "rank": values[0]}
 	
-	# 四张炸弹
-	if cards.size() == 4 and values[0] == values[1] and values[1] == values[2] and values[2] == values[3]:
-		return {"valid": true, "type": "四张炸弹", "rank": values[0]}
-	
-	# 顺子 (5张或以上连续)
-	if cards.size() >= 5:
+	# 顺子 (5张或以上连续，不含2和王)
+	if cards.size() >= 5 and jokers.size() == 0:
 		var is_straight = true
 		for i in range(1, values.size()):
 			if values[i] != values[i-1] + 1:
